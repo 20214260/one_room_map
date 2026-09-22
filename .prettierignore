@@ -1,0 +1,8 @@
+node_modules
+dist
+.sites-runtime
+.git
+.wrangler
+vendor
+components/ui
+pnpm-lock.yaml
