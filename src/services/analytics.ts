@@ -5,7 +5,8 @@ export type AnalyticsName =
   | 'comparison_complete'
   | 'recommendation_ai'
   | 'recommendation_rules'
-  | 'login_success';
+  | 'login_success'
+  | 'room_submitted';
 export function track(name: AnalyticsName, roomIds: string[] = []) {
   if (typeof window !== 'undefined')
     window.dispatchEvent(

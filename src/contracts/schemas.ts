@@ -30,7 +30,7 @@ export const SourceSchema = z.object({
     .nullable(),
   collectedAt: z.string(),
   license: z.string(),
-  kind: z.enum(['sample', 'licensed', 'public']),
+  kind: z.enum(['sample', 'licensed', 'public', 'owner']),
   note: z.string(),
 });
 export const RoomSchema = z.object({
@@ -159,4 +159,53 @@ export const RecommendationSchema = z.object({
   fallbackReason: z.string().nullable(),
 });
 export type Recommendation = z.infer<typeof RecommendationSchema>;
+
+// 매물 등록 (집주인·부동산 직접 등록). 1단(필수)만 채워도 제출 가능, 2단은 나중에 보완 가능.
+// 좌표·학교거리·편의시설은 서버가 locationHint로 지오코딩/경로 계산 후 채움. 응답 Room에는 절대 포함하지 않음.
+export const zonePresets = ['front-gate', 'back-gate', 'other'] as const;
+export const contactMethods = ['phone', 'kakao'] as const;
+export const ContactSchema = z.object({
+  method: z.enum(contactMethods),
+  value: z.string().min(1).max(100),
+});
+export type Contact = z.infer<typeof ContactSchema>;
+export const RoomSubmissionSchema = z.object({
+  // 1단 - 필수
+  title: z.string().min(1).max(60),
+  locationHint: z.object({
+    zone: z.enum(zonePresets),
+    detail: z.string().min(1).max(60),
+  }),
+  rent: z.number().int().nonnegative(),
+  contact: ContactSchema,
+  // 2단 - 선택, 등록 후에도 보완 가능
+  deposit: amount.optional(),
+  maintenance: amount.optional(),
+  area: z.number().positive().nullable().optional(),
+  floor: z.number().int().nullable().optional(),
+  options: z.record(z.enum(optionIds), z.boolean()).optional(),
+  description: z.string().max(1000).optional(),
+  photos: z.array(z.object({ url: z.string(), alt: z.string() })).max(10).optional(),
+  // 기존 게시판 글 붙여넣기 → AI 자동채움 보조용. 저장하지 않고 제출 시점에만 사용.
+  pastedListingText: z.string().max(2000).optional(),
+});
+export type RoomSubmission = z.infer<typeof RoomSubmissionSchema>;
+export const RoomSubmissionResponseSchema = z.object({
+  roomId: z.string(),
+  status: z.enum(['pending_review', 'published']),
+});
+export type RoomSubmissionResponse = z.infer<typeof RoomSubmissionResponseSchema>;
+
+// 문의하기 (연락처 비공개 중계). 학생 → 서버 → 집주인으로 메시지만 전달, 양쪽 연락처는 서버 밖으로 노출되지 않음.
+export const InquiryRequestSchema = z.object({
+  roomId: z.string(),
+  message: z.string().min(1).max(500),
+  replyContact: ContactSchema,
+});
+export type InquiryRequest = z.infer<typeof InquiryRequestSchema>;
+export const InquiryResponseSchema = z.object({
+  status: z.enum(['sent', 'failed']),
+});
+export type InquiryResponse = z.infer<typeof InquiryResponseSchema>;
+
 export type AppConfig = { mode: 'mock' | 'http'; apiBaseUrl: string; kakaoMapKey: string };

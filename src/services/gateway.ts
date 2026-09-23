@@ -5,14 +5,22 @@ import {
   UserSchema,
   RecommendationSchema,
   RecommendationRequestSchema,
+  RoomSubmissionSchema,
+  RoomSubmissionResponseSchema,
+  InquiryRequestSchema,
+  InquiryResponseSchema,
   type AppConfig,
   type Room,
   type Search,
   type RecommendationRequest,
   type Recommendation,
   type User,
+  type RoomSubmission,
+  type RoomSubmissionResponse,
+  type InquiryRequest,
+  type InquiryResponse,
 } from '../contracts/schemas';
-import { searchRooms, rulesSummary, safeReturnPath } from '../domain/rooms';
+import { searchRooms, rulesSummary, safeReturnPath, submissionToRoom } from '../domain/rooms';
 import { mockRooms } from './mock/data';
 export class ApiError extends Error {
   constructor(
@@ -27,6 +35,8 @@ export interface Gateway {
   list(search: Search, signal?: AbortSignal): Promise<{ items: Room[]; total: number }>;
   get(id: string, signal?: AbortSignal): Promise<Room>;
   recommend(request: RecommendationRequest, signal?: AbortSignal): Promise<Recommendation>;
+  submitRoom(input: RoomSubmission, signal?: AbortSignal): Promise<RoomSubmissionResponse>;
+  inquire(input: InquiryRequest, signal?: AbortSignal): Promise<InquiryResponse>;
   me(signal?: AbortSignal): Promise<User | null>;
   login(email: string, password: string): Promise<User>;
   register(email: string, password: string): Promise<User>;
@@ -80,6 +90,20 @@ export function createGateway(config: AppConfig): Gateway {
           input.filters,
           '샘플 환경에서는 규칙 기반 요약을 제공해요.',
         );
+      },
+      async submitRoom(input, signal) {
+        const parsed = RoomSubmissionSchema.parse(input);
+        await delay(signal);
+        const id = `owner-${Date.now().toString(36)}-${mockRooms.length}`;
+        mockRooms.push(submissionToRoom(parsed, id));
+        return { roomId: id, status: 'published' };
+      },
+      async inquire(input, signal) {
+        InquiryRequestSchema.parse(input);
+        await delay(signal);
+        if (!mockRooms.some((r) => r.id === input.roomId))
+          throw new ApiError('NOT_FOUND', '문의할 방을 다시 선택해 주세요.');
+        return { status: 'sent' };
       },
       async me() {
         return null;
@@ -178,6 +202,18 @@ export function createGateway(config: AppConfig): Gateway {
         signal,
       }),
     get: (id, signal) => request(`/rooms/${encodeURIComponent(id)}`, RoomSchema, { signal }),
+    submitRoom: (input, signal) => {
+      const body = RoomSubmissionSchema.parse(input);
+      return request('/rooms', RoomSubmissionResponseSchema, { method: 'POST', body, signal });
+    },
+    inquire: (input, signal) => {
+      const body = InquiryRequestSchema.parse(input);
+      return request(`/rooms/${encodeURIComponent(input.roomId)}/inquiries`, InquiryResponseSchema, {
+        method: 'POST',
+        body,
+        signal,
+      });
+    },
     async recommend(input, signal) {
       const body = RecommendationRequestSchema.parse(input);
       try {

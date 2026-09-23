@@ -27,6 +27,8 @@
 | POST   | `/auth/logout`                 | 없음                                                | 204, 쿠키 만료                   |
 | POST   | `/auth/oauth/{provider}/start` | `{returnTo: '/compare?ids=...'}`                    | `{authorizationUrl}`             |
 | POST   | `/recommendations`             | `{roomIds,filters,prompt}`                          | `Recommendation`                 |
+| POST   | `/rooms`                       | `RoomSubmission` (집주인 등록, 아래 참고)           | `{roomId, status}`               |
+| POST   | `/rooms/{id}/inquiries`        | `{roomId,message,replyContact}`                     | `{status: 'sent'\|'failed'}`     |
 
 샘플 규모에서는 현재 검색의 전체 결과를 반환합니다. 페이지네이션은 이번 계약에 없습니다. 매물이 크게 늘어나면 커서와 지도 클러스터 조회 API를 먼저 계약에 추가하세요. 현재 지도 구역 수는 조회 결과의 0.001도 좌표 버킷 수이며 행정 구역 수가 아닙니다.
 
@@ -70,7 +72,45 @@
 | distanceSource                          | Source 또는 null                  | 주변 환경 데이터 출처                 |
 | published                               | boolean                           | 서버에서 공개 승인 검증               |
 
-Source: `{name,url,collectedAt,license,kind,note}`. kind는 `sample | licensed | public`, url은 URL 또는 null. 표준 옵션과 시설 식별자는 `schemas.ts`가 단일 기준입니다. 사진 URL은 자체 공개 경로 또는 HTTPS 이미지 URL을 사용하고, 주소·연락처·소유자 개인정보는 응답에 넣지 않습니다.
+Source: `{name,url,collectedAt,license,kind,note}`. kind는 `sample | licensed | public | owner`(`owner` = 집주인·부동산 자체 등록), url은 URL 또는 null. 표준 옵션과 시설 식별자는 `schemas.ts`가 단일 기준입니다. 사진 URL은 자체 공개 경로 또는 HTTPS 이미지 URL을 사용하고, 주소·연락처·소유자 개인정보는 응답에 넣지 않습니다.
+
+### 매물 등록 (POST /rooms) — 집주인·부동산 직접 등록
+
+크롤링/샘플과 별개로, 집주인·부동산이 최소 정보만으로 매물을 직접 올릴 수 있는 경로입니다. `RoomSubmissionSchema`(`src/contracts/schemas.ts`) 기준이며 1단(필수)만 채워도 제출됩니다.
+
+```json
+{
+  "title": "정문 1분 풀옵션 원룸",
+  "locationHint": { "zone": "front-gate", "detail": "공대 후문 도보 3분" },
+  "rent": 320000,
+  "contact": { "method": "phone", "value": "010-0000-0000" },
+
+  "deposit": 3000000,
+  "maintenance": 50000,
+  "area": 23.1,
+  "floor": 2,
+  "options": { "aircon": true, "washer": true },
+  "description": "2018년 신축, 풀옵션.",
+  "photos": [{ "url": "https://...", "alt": "정면 사진" }],
+  "pastedListingText": "기존 게시판 글을 그대로 붙여넣으면 위 필드를 자동으로 채우는 데 씁니다. 저장하지 않습니다."
+}
+```
+
+- **1단(필수)**: `title`, `locationHint`(`zone: front-gate|back-gate|other` + `detail` 자유 텍스트 한 줄), `rent`, `contact`. 이것만 있으면 등록됩니다.
+- **2단(선택)**: `deposit`/`maintenance`/`area`/`floor`/`options`/`description`/`photos`. 비워도 되고, 등록 후 보완 가능합니다. `Room` 응답에서는 그대로 null/빈 배열로 노출됩니다(예: `facilities`는 아직 도보 경로 데이터가 없어 빈 배열, `schoolDistance`는 null — 백엔드가 카카오 길찾기 등으로 채우기 전까지).
+- `locationHint`는 정확 주소가 아닙니다. 서버가 `zone` 기준 대략 좌표로 우선 채우고(현재 mock: front-gate/back-gate 앵커 좌표, other는 null), 실제 서비스에서는 카카오 지오코딩으로 정밀화해야 합니다.
+- `pastedListingText`는 저장하지 않고 자동채움 보조에만 씁니다. mock 모드에서는 `src/domain/rooms.ts`의 `extractListingHints()`가 정규식으로 보증금/월세/관리비/전화번호를 추출합니다 — Gemini 연동 전 자리표시자이며, 실제 서비스에서는 이 자리를 백엔드 AI가 대신합니다.
+- **연락처는 응답 `Room`에 절대 포함하지 않습니다.** 학생이 매물을 보고 연락하고 싶으면 `POST /rooms/{id}/inquiries`로 메시지를 보내고, 서버가 등록자에게 중계합니다(전화번호/카카오 링크를 양쪽 모두에게 직접 노출하지 않음 — 문의 중계 방식, 팀 합의 완료).
+- 등록 직후 `status`는 `pending_review`가 기본이며 검수 후 `published: true`로 노출 대상이 됩니다. **mock 모드는 검수 단계가 없어 등록 즉시 `published: true`로 처리**합니다 — 실제 서비스에서는 반드시 허위매물/스팸 검수를 거쳐야 합니다(AI 검증은 별도 논의 대상, 아직 미구현).
+- `source.kind`는 `owner`로 기록되어 크롤링/샘플 매물과 구분됩니다.
+
+### 문의하기 (POST /rooms/{id}/inquiries)
+
+```json
+{ "roomId": "owner-abc123", "message": "이번 주말에 방 볼 수 있을까요?", "replyContact": { "method": "kakao", "value": "https://open.kakao.com/..." } }
+```
+
+응답은 `{ "status": "sent" }` 또는 `{ "status": "failed" }`뿐입니다. 서버는 `roomId`로 등록자 연락처를 조회해 메시지를 전달하고, 학생의 `replyContact` 역시 응답에 그대로 반환하지 않습니다 — 두 연락처 모두 서버 밖으로 노출되지 않는 중계 구조입니다.
 
 ### AI 요청과 응답
 

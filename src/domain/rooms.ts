@@ -1,10 +1,12 @@
 import {
   emptyFilters,
   FiltersSchema,
+  optionIds,
   type Filters,
   type Room,
   type Search,
   type Recommendation,
+  type RoomSubmission,
 } from '../contracts/schemas';
 export function monthlyCost(room: Pick<Room, 'rent' | 'maintenance'>): number | null {
   return room.rent === null || room.maintenance === null ? null : room.rent + room.maintenance;
@@ -164,4 +166,62 @@ export function readFilters(params: URLSearchParams): Filters {
 }
 export function safeReturnPath(raw: string | null): string {
   return raw?.startsWith('/') && !raw.startsWith('//') && !raw.includes('\\') ? raw : '/';
+}
+// 정확 주소를 안 받는 대신 쓰는 대략적 앵커. 실서비스에선 카카오 지오코딩으로 대체.
+const zoneAnchors: Record<RoomSubmission['locationHint']['zone'], { lat: number; lng: number } | null> = {
+  'front-gate': { lat: 34.9716, lng: 127.4801 },
+  'back-gate': { lat: 34.9702, lng: 127.4849 },
+  other: null,
+};
+export function submissionToRoom(input: RoomSubmission, id: string): Room {
+  const options = Object.fromEntries(
+    optionIds.map((key) => [key, input.options?.[key] ?? null]),
+  ) as Room['options'];
+  return {
+    id,
+    title: input.title,
+    neighborhood: input.locationHint.detail,
+    description: input.description ?? '',
+    coordinates: zoneAnchors[input.locationHint.zone],
+    deposit: input.deposit ?? null,
+    rent: input.rent,
+    maintenance: input.maintenance ?? null,
+    area: input.area ?? null,
+    floor: input.floor ?? null,
+    options,
+    nearCommercial: null,
+    photos: input.photos ?? [],
+    schoolDistance: null,
+    facilities: [],
+    distanceSource: null,
+    source: {
+      name: '집주인·부동산 직접 등록',
+      url: null,
+      collectedAt: new Date().toISOString().slice(0, 10),
+      license: '등록자 제공',
+      kind: 'owner',
+      note: '등록자가 직접 입력한 정보이며 아직 좌표·도보거리는 검증 전이에요.',
+    },
+    published: true,
+  };
+}
+// 기존 게시판 글을 붙여넣었을 때 흔한 패턴(보증금/월세/관리비/연락처)을 뽑아내는 가벼운 보조 함수.
+// 실제 서비스에서는 Gemini가 이 자리를 대신하고, 이건 AI 연결 전 샘플 동작용.
+export function extractListingHints(text: string): {
+  deposit: number | null;
+  rent: number | null;
+  maintenance: number | null;
+  phone: string | null;
+} {
+  const won = (raw: string) => Number(raw.replace(/,/g, '')) * 10000;
+  const deposit = text.match(/보증금\s*[:\s]*([\d,]+)\s*만/)?.[1];
+  const rent = text.match(/월세\s*[:\s]*([\d,]+)\s*만/)?.[1];
+  const maintenance = text.match(/관리비\s*[:\s]*([\d,]+)\s*만/)?.[1];
+  const phone = text.match(/01[016789]-?\d{3,4}-?\d{4}/)?.[0] ?? null;
+  return {
+    deposit: deposit ? won(deposit) : null,
+    rent: rent ? won(rent) : null,
+    maintenance: maintenance ? won(maintenance) : null,
+    phone,
+  };
 }
