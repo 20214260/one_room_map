@@ -8,12 +8,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useApp } from '../../shared/AppProvider';
-import { RegisterSchema } from '../../contracts/schemas';
+import { RegisterSchema, type Role } from '../../contracts/schemas';
 import { safeReturnPath } from '../../domain/rooms';
 import { Header } from '../../shared/Header';
 export function AuthScreen() {
   const { api, setUser, config } = useApp();
   const router = useRouter();
+  const [role, setRole] = useState<Role>('seeker');
   const [tab, setTab] = useState('login'),
     [email, setEmail] = useState(''),
     [password, setPassword] = useState(''),
@@ -29,7 +30,7 @@ export function AuthScreen() {
     setMessage('');
     setErrors({});
     if (tab === 'register') {
-      const valid = RegisterSchema.safeParse({ email, password, confirmation, agreed });
+      const valid = RegisterSchema.safeParse({ email, password, confirmation, agreed, role });
       if (!valid.success) {
         const next: Record<string, string> = {};
         valid.error.issues.forEach((i) => (next[String(i.path[0])] = i.message));
@@ -49,13 +50,13 @@ export function AuthScreen() {
     try {
       const user =
         tab === 'register'
-          ? await api.register(email.trim(), password)
+          ? await api.register(email.trim(), password, role)
           : await api.login(email.trim(), password);
       setUser(user);
       track('login_success');
       setPassword('');
       setConfirmation('');
-      router.replace(returnTo());
+      router.replace(user.role === 'landlord' && returnTo() === '/' ? '/landlord' : returnTo());
     } catch (e) {
       setMessage((e as Error).message);
     } finally {
@@ -69,6 +70,25 @@ export function AuthScreen() {
       location.assign(await api.oauth(provider, returnTo()));
     } catch (e) {
       setMessage((e as Error).message);
+      setBusy(false);
+    }
+  }
+  async function demo(nextRole: Role) {
+    setBusy(true);
+    setMessage('');
+    try {
+      const user = await api.demoLogin(nextRole);
+      setUser(user);
+      router.replace(
+        nextRole === 'landlord'
+          ? '/landlord'
+          : returnTo().startsWith('/landlord')
+            ? '/'
+            : returnTo(),
+      );
+    } catch (e) {
+      setMessage((e as Error).message);
+    } finally {
       setBusy(false);
     }
   }
@@ -128,6 +148,33 @@ export function AuthScreen() {
             <span>또는 이메일로</span>
           </div>
           <form noValidate onSubmit={submit}>
+            {tab === 'register' && (
+              <fieldset className="owner-role-select">
+                <legend>어떻게 순룸을 이용하실 건가요?</legend>
+                <div>
+                  {(['seeker', 'landlord'] as const).map((value) => (
+                    <label key={value} className={role === value ? 'chosen' : ''}>
+                      <input
+                        type="radio"
+                        name="role"
+                        value={value}
+                        checked={role === value}
+                        onChange={() => setRole(value)}
+                        disabled={busy}
+                      />
+                      <span>
+                        <strong>{value === 'seeker' ? '방을 구해요' : '방을 내놓아요'}</strong>
+                        <small>
+                          {value === 'seeker'
+                            ? '내 조건에 맞는 방 찾기'
+                            : '집주인 · 매물 등록과 관리'}
+                        </small>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
             <label htmlFor="email">이메일</label>
             <input
               id="email"
@@ -204,7 +251,21 @@ export function AuthScreen() {
             </button>
           </form>
           {config.mode === 'mock' && (
-            <p className="auth-demo-note">현재 샘플 화면이에요. 실제 계정은 생성되지 않아요.</p>
+            <div className="owner-demo-login">
+              <strong>가입 없이, 두 역할로 체험해 보세요</strong>
+              <div>
+                <button type="button" disabled={busy} onClick={() => demo('seeker')}>
+                  사용자로 체험
+                </button>
+                <button type="button" disabled={busy} onClick={() => demo('landlord')}>
+                  집주인으로 체험 <ArrowRight size={15} />
+                </button>
+              </div>
+              <p>
+                실제 계정·메시지 전송 없이 동작하는 시연이에요. 같은 탭에서 역할을 바꾸면 등록
+                매물과 문의를 확인할 수 있어요. 비밀번호는 저장하지 않아요.
+              </p>
+            </div>
           )}
         </section>
       </main>
@@ -219,7 +280,9 @@ export function AuthScreen() {
             </p>
             <p>
               정식 계정 연결 시 이메일, 제공자 식별자와 로그인 기록을 계정 관리 목적으로 처리할
-              예정입니다. 현재 샘플 화면은 입력한 이메일·비밀번호를 저장하거나 전송하지 않습니다.
+              예정입니다. 현재 시연은 임시 사용자 정보와 매물을 이 탭의 세션 저장소에 보관합니다.
+              비밀번호는 저장·전송하지 않으며 탭을 닫으면 시연 데이터는 사라집니다. 실제 개인정보는
+              입력하지 마세요.
             </p>
             <p>
               개인정보 처리 주체, 보유 기간, 문의처 및 이용자 권리 안내는 실제 회원가입 공개 전에

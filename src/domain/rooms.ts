@@ -168,7 +168,10 @@ export function safeReturnPath(raw: string | null): string {
   return raw?.startsWith('/') && !raw.startsWith('//') && !raw.includes('\\') ? raw : '/';
 }
 // 정확 주소를 안 받는 대신 쓰는 대략적 앵커. 실서비스에선 카카오 지오코딩으로 대체.
-const zoneAnchors: Record<RoomSubmission['locationHint']['zone'], { lat: number; lng: number } | null> = {
+const zoneAnchors: Record<
+  RoomSubmission['locationHint']['zone'],
+  { lat: number; lng: number } | null
+> = {
   'front-gate': { lat: 34.9716, lng: 127.4801 },
   'back-gate': { lat: 34.9702, lng: 127.4849 },
   other: null,
@@ -182,7 +185,8 @@ export function submissionToRoom(input: RoomSubmission, id: string): Room {
     title: input.title,
     neighborhood: input.locationHint.detail,
     description: input.description ?? '',
-    coordinates: zoneAnchors[input.locationHint.zone],
+    coordinates:
+      input.coordinates === undefined ? zoneAnchors[input.locationHint.zone] : input.coordinates,
     deposit: input.deposit ?? null,
     rent: input.rent,
     maintenance: input.maintenance ?? null,

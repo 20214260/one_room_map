@@ -14,10 +14,18 @@ type KakaoMaps = {
   load(cb: () => void): void;
   LatLng: new (lat: number, lng: number) => LatLng;
   Map: new (el: HTMLElement, options: object) => MapInstance;
+  Marker: new (options: object) => {
+    setPosition(p: LatLng): void;
+    setMap(map: MapInstance | null): void;
+  };
   CustomOverlay: new (options: object) => Overlay;
   event: {
-    addListener(target: MapInstance, event: string, cb: () => void): void;
-    removeListener(target: MapInstance, event: string, cb: () => void): void;
+    addListener(target: MapInstance, event: string, cb: (event: { latLng: LatLng }) => void): void;
+    removeListener(
+      target: MapInstance,
+      event: string,
+      cb: (event: { latLng: LatLng }) => void,
+    ): void;
   };
 };
 declare global {
@@ -135,3 +143,42 @@ export async function createKakaoView(
   };
 }
 export type KakaoView = Awaited<ReturnType<typeof createKakaoView>>;
+
+export async function createLocationPicker(
+  el: HTMLElement,
+  key: string,
+  initial: Room['coordinates'],
+  onPick: (point: NonNullable<Room['coordinates']>) => void,
+) {
+  const sdk = await loadKakao(key);
+  const toPoint = (p: NonNullable<Room['coordinates']>) => new sdk.LatLng(p.lat, p.lng);
+  const map = new sdk.Map(el, {
+    center: toPoint(initial ?? { lat: 34.9709, lng: 127.4806 }),
+    level: 4,
+  });
+  const marker = new sdk.Marker({ position: toPoint(initial ?? { lat: 34.9709, lng: 127.4806 }) });
+  if (initial) marker.setMap(map);
+  const pick = (event: { latLng: LatLng }) => {
+    marker.setMap(map);
+    marker.setPosition(event.latLng);
+    onPick({ lat: event.latLng.getLat(), lng: event.latLng.getLng() });
+  };
+  sdk.event.addListener(map, 'click', pick);
+  const resize = new ResizeObserver(() => map.relayout());
+  resize.observe(el);
+  return {
+    set(point: Room['coordinates']) {
+      marker.setMap(point ? map : null);
+      if (point) {
+        marker.setPosition(toPoint(point));
+        map.setCenter(toPoint(point));
+      }
+    },
+    destroy() {
+      resize.disconnect();
+      sdk.event.removeListener(map, 'click', pick);
+      marker.setMap(null);
+      el.replaceChildren();
+    },
+  };
+}

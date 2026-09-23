@@ -1,4 +1,36 @@
 import { z } from 'zod';
+import { createMockGateway } from './mock/landlord-gateway';
+import { ApiError } from './errors';
+export { ApiError } from './errors';
+import { validatePhoto } from './photos';
+import {
+  ChatDetailSchema,
+  ChatsResponseSchema,
+  ChatMessageSchema,
+  StartChatSchema,
+  ChatTextSchema,
+  VisitDecisionSchema,
+  ReportReasonSchema,
+  type ChatDetail,
+  type ChatSummary,
+  type ChatMessage,
+  type VisitDecision,
+} from '../contracts/chat';
+import {
+  OwnerListingSchema,
+  OwnerListingsSchema,
+  InboxSchema,
+  ListingStatusSchema,
+  DraftRequestSchema,
+  DraftResponseSchema,
+  UploadResponseSchema,
+  type OwnerListing,
+  type ListingStatus,
+  type InboxItem,
+  type DraftRequest,
+  type DraftResponse,
+  type UploadResponse,
+} from '../contracts/landlord';
 import {
   RoomSchema,
   RoomsResponseSchema,
@@ -15,31 +47,49 @@ import {
   type RecommendationRequest,
   type Recommendation,
   type User,
+  type Role,
   type RoomSubmission,
   type RoomSubmissionResponse,
   type InquiryRequest,
   type InquiryResponse,
 } from '../contracts/schemas';
-import { searchRooms, rulesSummary, safeReturnPath, submissionToRoom } from '../domain/rooms';
-import { mockRooms } from './mock/data';
-export class ApiError extends Error {
-  constructor(
-    public code: string,
-    message: string,
-    public status = 0,
-  ) {
-    super(message);
-  }
-}
+import { rulesSummary, safeReturnPath } from '../domain/rooms';
 export interface Gateway {
   list(search: Search, signal?: AbortSignal): Promise<{ items: Room[]; total: number }>;
   get(id: string, signal?: AbortSignal): Promise<Room>;
   recommend(request: RecommendationRequest, signal?: AbortSignal): Promise<Recommendation>;
   submitRoom(input: RoomSubmission, signal?: AbortSignal): Promise<RoomSubmissionResponse>;
   inquire(input: InquiryRequest, signal?: AbortSignal): Promise<InquiryResponse>;
+  listChats(signal?: AbortSignal): Promise<{ items: ChatSummary[] }>;
+  getChat(id: string, signal?: AbortSignal): Promise<ChatDetail>;
+  startChat(roomId: string, message: string, signal?: AbortSignal): Promise<ChatDetail>;
+  sendChatMessage(id: string, message: string, signal?: AbortSignal): Promise<ChatMessage>;
+  markChatRead(id: string, signal?: AbortSignal): Promise<void>;
+  proposeVisit(id: string, visitAt: string, signal?: AbortSignal): Promise<ChatMessage>;
+  respondVisit(
+    id: string,
+    proposalId: string,
+    decision: VisitDecision,
+    signal?: AbortSignal,
+  ): Promise<ChatMessage>;
+  blockChat(id: string, signal?: AbortSignal): Promise<ChatDetail>;
+  reportChat(
+    id: string,
+    reason: 'spam' | 'inappropriate' | 'other',
+    signal?: AbortSignal,
+  ): Promise<void>;
   me(signal?: AbortSignal): Promise<User | null>;
   login(email: string, password: string): Promise<User>;
-  register(email: string, password: string): Promise<User>;
+  register(email: string, password: string, role?: Role): Promise<User>;
+  demoLogin(role: Role): Promise<User>;
+  myRooms(signal?: AbortSignal): Promise<{ items: OwnerListing[] }>;
+  updateRoom(id: string, input: RoomSubmission, signal?: AbortSignal): Promise<OwnerListing>;
+  setRoomStatus(id: string, status: ListingStatus, signal?: AbortSignal): Promise<OwnerListing>;
+  deleteRoom(id: string, signal?: AbortSignal): Promise<void>;
+  inbox(signal?: AbortSignal): Promise<{ items: InboxItem[] }>;
+  readInquiry(id: string, signal?: AbortSignal): Promise<void>;
+  generateDraft(input: DraftRequest, signal?: AbortSignal): Promise<DraftResponse>;
+  uploadPhoto(file: File, signal?: AbortSignal): Promise<UploadResponse>;
   logout(): Promise<void>;
   oauth(provider: 'kakao' | 'google', returnTo: string): Promise<string>;
 }
@@ -49,89 +99,17 @@ const publicErrors: Record<string, string> = {
   RATE_LIMITED: '요청이 많아요. 잠시 후 다시 시도해 주세요.',
   ACCOUNT_LINK_REQUIRED: '동일 이메일의 계정이 있어요. 기존 로그인 방식으로 로그인해 주세요.',
   OAUTH_CANCELLED: '로그인이 취소되었어요. 다시 시도할 수 있어요.',
+  FORBIDDEN: '이 작업을 할 권한이 없어요.',
+  INVALID_TRANSITION: '현재 상태에서는 변경할 수 없어요. 목록을 새로고침해 주세요.',
+  CHAT_BLOCKED: '차단된 대화에는 메시지를 보낼 수 없어요.',
+  ROOM_CLOSED: '거래가 종료되어 새 메시지를 보낼 수 없어요.',
 };
-function delay(signal?: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) return reject(new DOMException('Aborted', 'AbortError'));
-    const done = () => {
-      signal?.removeEventListener('abort', abort);
-      resolve();
-    };
-    const timer = setTimeout(done, 220);
-    const abort = () => {
-      clearTimeout(timer);
-      reject(new DOMException('Aborted', 'AbortError'));
-    };
-    signal?.addEventListener('abort', abort, { once: true });
-  });
-}
 export function createGateway(config: AppConfig): Gateway {
-  if (config.mode === 'mock')
-    return {
-      async list(search, signal) {
-        await delay(signal);
-        const items = searchRooms(mockRooms, search);
-        return { items, total: items.length };
-      },
-      async get(id, signal) {
-        await delay(signal);
-        const room = mockRooms.find((r) => r.id === id);
-        if (!room) throw new ApiError('NOT_FOUND', '이 방은 더 이상 조회할 수 없어요.', 404);
-        return room;
-      },
-      async recommend(input, signal) {
-        RecommendationRequestSchema.parse(input);
-        await delay(signal);
-        const rooms = input.roomIds.map((id) => mockRooms.find((r) => r.id === id));
-        if (rooms.some((r) => !r))
-          throw new ApiError('NOT_FOUND', '비교할 방을 다시 선택해 주세요.');
-        return rulesSummary(
-          rooms as Room[],
-          input.filters,
-          '샘플 환경에서는 규칙 기반 요약을 제공해요.',
-        );
-      },
-      async submitRoom(input, signal) {
-        const parsed = RoomSubmissionSchema.parse(input);
-        await delay(signal);
-        const id = `owner-${Date.now().toString(36)}-${mockRooms.length}`;
-        mockRooms.push(submissionToRoom(parsed, id));
-        return { roomId: id, status: 'published' };
-      },
-      async inquire(input, signal) {
-        InquiryRequestSchema.parse(input);
-        await delay(signal);
-        if (!mockRooms.some((r) => r.id === input.roomId))
-          throw new ApiError('NOT_FOUND', '문의할 방을 다시 선택해 주세요.');
-        return { status: 'sent' };
-      },
-      async me() {
-        return null;
-      },
-      async login() {
-        throw new ApiError(
-          'DEMO',
-          '계정 연결을 준비 중이에요. 비회원으로 모든 방을 비교할 수 있어요.',
-        );
-      },
-      async register() {
-        throw new ApiError(
-          'DEMO',
-          '샘플 화면에서는 계정을 생성하지 않아요. 입력한 비밀번호는 저장되지 않아요.',
-        );
-      },
-      async logout() {},
-      async oauth() {
-        throw new ApiError(
-          'DEMO',
-          '소셜 로그인 연결을 준비 중이에요. 비회원으로 모든 방을 비교할 수 있어요.',
-        );
-      },
-    };
+  if (config.mode === 'mock') return createMockGateway();
   const base = config.apiBaseUrl.replace(/\/$/, '');
   async function request<T>(
     path: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     options: { method?: string; body?: unknown; signal?: AbortSignal; timeout?: number } = {},
   ): Promise<T> {
     const controller = new AbortController(),
@@ -141,7 +119,8 @@ export function createGateway(config: AppConfig): Gateway {
     const timer = setTimeout(abort, options.timeout ?? 12000);
     try {
       const headers: Record<string, string> = { Accept: 'application/json' };
-      if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+      const multipart = typeof FormData !== 'undefined' && options.body instanceof FormData;
+      if (options.body !== undefined && !multipart) headers['Content-Type'] = 'application/json';
       if (options.method && options.method !== 'GET') {
         const csrf = await fetch(`${base}/auth/csrf`, {
           credentials: 'include',
@@ -157,7 +136,11 @@ export function createGateway(config: AppConfig): Gateway {
         method: options.method ?? 'GET',
         headers,
         credentials: 'include',
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body: multipart
+          ? (options.body as FormData)
+          : options.body === undefined
+            ? undefined
+            : JSON.stringify(options.body),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -197,6 +180,102 @@ export function createGateway(config: AppConfig): Gateway {
     }
   }
   const gateway: Gateway = {
+    listChats: (signal) => request('/chats', ChatsResponseSchema, { signal }),
+    getChat: (id, signal) =>
+      request(`/chats/${encodeURIComponent(id)}`, ChatDetailSchema, { signal }),
+    startChat: (roomId, message, signal) =>
+      request('/chats', ChatDetailSchema, {
+        method: 'POST',
+        body: StartChatSchema.parse({ roomId, message }),
+        signal,
+      }),
+    sendChatMessage: (id, message, signal) =>
+      request(`/chats/${encodeURIComponent(id)}/messages`, ChatMessageSchema, {
+        method: 'POST',
+        body: { message: ChatTextSchema.parse(message) },
+        signal,
+      }),
+    markChatRead: (id, signal) =>
+      request(`/chats/${encodeURIComponent(id)}/read`, z.null(), {
+        method: 'PATCH',
+        signal,
+      }).then(() => undefined),
+    proposeVisit: (id, visitAt, signal) =>
+      request(`/chats/${encodeURIComponent(id)}/visits`, ChatMessageSchema, {
+        method: 'POST',
+        body: { visitAt: z.string().datetime().parse(visitAt) },
+        signal,
+      }),
+    respondVisit: (id, proposalId, decision, signal) =>
+      request(
+        `/chats/${encodeURIComponent(id)}/visits/${encodeURIComponent(proposalId)}/response`,
+        ChatMessageSchema,
+        {
+          method: 'POST',
+          body: { decision: VisitDecisionSchema.parse(decision) },
+          signal,
+        },
+      ),
+    blockChat: (id, signal) =>
+      request(`/chats/${encodeURIComponent(id)}/block`, ChatDetailSchema, {
+        method: 'POST',
+        signal,
+      }),
+    reportChat: (id, reason, signal) =>
+      request(
+        `/chats/${encodeURIComponent(id)}/reports`,
+        z.object({ status: z.literal('received') }),
+        {
+          method: 'POST',
+          body: { reason: ReportReasonSchema.parse(reason) },
+          signal,
+        },
+      ).then(() => undefined),
+    async demoLogin() {
+      throw new ApiError('FORBIDDEN', '임시 로그인은 시연 모드에서만 사용할 수 있어요.', 403);
+    },
+    myRooms: (signal) => request('/owner/rooms', OwnerListingsSchema, { signal }),
+    updateRoom: (id, input, signal) =>
+      request(`/owner/rooms/${encodeURIComponent(id)}`, OwnerListingSchema, {
+        method: 'PATCH',
+        body: RoomSubmissionSchema.parse(input),
+        signal,
+      }),
+    setRoomStatus: (id, status, signal) =>
+      request(`/owner/rooms/${encodeURIComponent(id)}/status`, OwnerListingSchema, {
+        method: 'PATCH',
+        body: { status: ListingStatusSchema.parse(status) },
+        signal,
+      }),
+    deleteRoom: (id, signal) =>
+      request(`/owner/rooms/${encodeURIComponent(id)}`, z.null(), {
+        method: 'DELETE',
+        signal,
+      }).then(() => undefined),
+    inbox: (signal) => request('/owner/inquiries', InboxSchema, { signal }),
+    readInquiry: (id, signal) =>
+      request(`/owner/inquiries/${encodeURIComponent(id)}/read`, z.null(), {
+        method: 'PATCH',
+        signal,
+      }).then(() => undefined),
+    generateDraft: (input, signal) =>
+      request('/rooms/draft', DraftResponseSchema, {
+        method: 'POST',
+        body: DraftRequestSchema.parse(input),
+        signal,
+        timeout: 20000,
+      }),
+    uploadPhoto: (file, signal) => {
+      validatePhoto(file);
+      const body = new FormData();
+      body.append('file', file);
+      return request('/owner/photos', UploadResponseSchema, {
+        method: 'POST',
+        body,
+        signal,
+        timeout: 20000,
+      });
+    },
     list: (search, signal) =>
       request(`/rooms?search=${encodeURIComponent(JSON.stringify(search))}`, RoomsResponseSchema, {
         signal,
@@ -208,11 +287,15 @@ export function createGateway(config: AppConfig): Gateway {
     },
     inquire: (input, signal) => {
       const body = InquiryRequestSchema.parse(input);
-      return request(`/rooms/${encodeURIComponent(input.roomId)}/inquiries`, InquiryResponseSchema, {
-        method: 'POST',
-        body,
-        signal,
-      });
+      return request(
+        `/rooms/${encodeURIComponent(input.roomId)}/inquiries`,
+        InquiryResponseSchema,
+        {
+          method: 'POST',
+          body,
+          signal,
+        },
+      );
     },
     async recommend(input, signal) {
       const body = RecommendationRequestSchema.parse(input);
@@ -250,10 +333,10 @@ export function createGateway(config: AppConfig): Gateway {
     },
     login: (email, password) =>
       request('/auth/login', UserSchema, { method: 'POST', body: { email, password } }),
-    register: (email, password) =>
+    register: (email, password, role = 'seeker') =>
       request('/auth/register', UserSchema, {
         method: 'POST',
-        body: { email, password, termsVersion: '2026-09-22', agreed: true },
+        body: { email, password, role, termsVersion: '2026-09-22', agreed: true },
       }),
     logout: () => request('/auth/logout', z.null(), { method: 'POST' }).then(() => undefined),
     async oauth(provider, returnTo) {
