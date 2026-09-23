@@ -1,104 +1,467 @@
-# 순룸 · Sunroom
+# 순룸 Sunroom
 
-순천대학교 학생을 위한 원룸 비교 프론트엔드입니다. 제공된 2026-09-21 기능명세서를 기준으로 구현했습니다. **현재는 샘플 데이터로 동작하는 프론트엔드이며 실제 인증·매물·Gemini 백엔드는 포함하지 않습니다.**
+# 개발 시작 전에 이 README를 GPT에 입력하고 개발할 것
 
-탐색 → 조건 필터 → 상세 → 2개 비교 → 근거 요약과, 집주인 임시 로그인 → 지도 핀·사진·초안 → 등록·관리 → 사용자 문의·채팅을 시연할 수 있습니다. 백엔드 연결부와 화면을 분리해 FE 2명, BE 2명이 나눠 작업하도록 구성했습니다.
+GPT, Claude, Codex 같은 AI로 작업할 때 이 README 내용이랑 수정할 파일을 같이 입력해줘.
 
-## 처음 실행하기
+기존 프로젝트 구조를 마음대로 뜯어고치지 말고 아래 규칙 지켜서 개발하면 됨.
 
-Node.js 22.13 이상과 pnpm을 사용합니다. `pnpm-lock.yaml`을 유지하세요.
+* 화면에서 서버에 직접 요청하지 말 것
+* API 요청은 `src/services/gateway.ts` 사용
+* 데이터 형식은 `src/contracts/schemas.ts` 기준
+* 실제 API가 없어도 샘플 모드가 계속 작동해야 함
+* 공용 파일 수정할 때는 팀원에게 먼저 말하기
+* `.env.local`이나 API 키는 절대 GitHub에 올리지 말기
+* 작업 후 `pnpm typecheck`, `pnpm test`, `pnpm build` 확인하기
 
-```sh
-corepack enable
+---
+
+## 프로젝트 설명
+
+순천대학교 학생들이 예산과 원하는 조건에 맞는 원룸을 쉽게 찾고 비교할 수 있도록 만든 서비스.
+
+현재는 기본 프론트엔드 화면과 기능을 구현한 상태고, 샘플 매물 데이터를 이용해서 전체적인 서비스 흐름 확인 가능함.
+
+실제 로그인, 매물 데이터, 카카오 지도, AI 추천 기능은 앞으로 백엔드와 연결해야 함.
+
+---
+
+## 현재 구현된 기능
+
+* 원룸 목록 확인
+* 보증금, 월세, 관리비 확인
+* 편의시설과 방 옵션 확인
+* 예산과 원하는 조건으로 필터링
+* 검색 결과 정렬
+* 조건에 맞는 매물만 보기
+* 매물 상세 정보 확인
+* 최대 2개 매물 선택
+* 선택한 매물의 비용, 거리, 옵션 비교
+* 원하는 방을 문장으로 입력하는 AI 추천 화면
+* AI 연결 전 사용할 수 있는 기본 추천 결과
+* 이메일 로그인 및 회원가입 화면
+* Kakao, Google 로그인 버튼
+* 카카오 지도 연결을 위한 기본 구조
+* 지도 API가 없을 때 보여주는 샘플 지도
+* 로딩, 빈 결과, 오류 화면 처리
+* 모바일 화면 대응
+* 기본 테스트와 GitHub 자동 검사
+
+현재는 샘플 매물 6개 사용 중.
+
+### 집주인 매물 등록과 채팅 시연
+
+집주인·방을 찾는 사용자 역할별 임시 로그인, 집주인 전용 매물 등록·관리, 직접 등록한 공개 매물의 채팅을 추가했음. 기존 방 찾기·비교·문의도 계속 사용 가능함.
+
+* `/landlord`에서 집주인으로 매물을 등록하면 샘플 매물과 함께 검색·지도에 표시됨.
+* 사용자는 직접 등록한 매물 상세에서 `채팅으로 문의하기`를 눌러 대화를 시작할 수 있음. 샘플 매물에서는 채팅을 시작할 수 없음.
+* `/chats`에서 두 역할 모두 대화 내역, 읽지 않은 메시지, 방문 시간 제안·답변, 신고·차단을 사용할 수 있음.
+* 현재 시연 데이터는 같은 브라우저 탭에서만 유지됨. 실제 세션·매물·채팅 서버는 별도 연동 필요.
+
+프론트·백엔드 연동 기준은 `docs/LANDLORD_HANDOFF.md`와 `docs/CHAT_HANDOFF.md`를 참고. Windows에서 `pnpm dev` 실행 시 `ECONNRESET`이 반복되면 `pnpm exec vite --config vite.local.config.ts`로 시연 화면을 실행할 수 있음.
+
+---
+
+## 아직 실제로 연결되지 않은 기능
+
+아래 기능들은 화면과 연결 구조만 만들어져 있고 실제 서버 연결은 아직 안 된 상태.
+
+* 실제 회원가입 및 로그인
+* Kakao, Google OAuth 로그인
+* 실제 원룸 매물 데이터
+* 실제 카카오 지도
+* 실제 사용자 위치
+* Gemini를 이용한 AI 추천
+* 찜 목록 저장
+* 서버 데이터베이스 저장
+
+현재 실행하면 샘플 데이터로 작동함.
+
+---
+
+# 환경 구축
+
+## 1. 프로그램 설치
+
+### Node.js
+
+Node.js 22 이상 설치.
+
+Node.js를 설치하면 npm도 같이 설치되기 때문에 npm은 따로 설치할 필요 없음.
+
+https://nodejs.org/
+
+버전 확인:
+
+```powershell
+node -v
+npm -v
+```
+
+### Git
+
+https://git-scm.com/
+
+버전 확인:
+
+```powershell
+git --version
+```
+
+### pnpm
+
+우리 프로젝트는 npm 대신 pnpm 사용함.
+
+```powershell
+npm install -g pnpm@11.25.0
+```
+
+버전 확인:
+
+```powershell
+pnpm -v
+```
+
+---
+
+## 2. 프로젝트 받기
+
+```powershell
+git clone https://github.com/20214260/one_room_map.git
+cd one_room_map
+```
+
+VS Code로 열기:
+
+```powershell
+code .
+```
+
+`code .`이 안 되면 VS Code에서 `파일 → 폴더 열기`로 `one_room_map` 폴더 열면 됨.
+
+---
+
+## 3. 패키지 설치
+
+```powershell
 pnpm install --frozen-lockfile
+```
+
+설치가 끝나면 `node_modules` 폴더가 생김.
+
+`node_modules`는 GitHub에 올리지 않아도 됨.
+
+---
+
+## 4. 프로젝트 실행
+
+```powershell
 pnpm dev
 ```
 
-새로 받은 소스는 기본적으로 `http://localhost:5173`에서 실행됩니다. 터미널에 다른 포트가 표시되면 그 주소를 사용하세요. 처음에는 환경변수 없이도 샘플 모드로 실행됩니다. 기존 프로젝트가 있다면 루트 전체를 덮어쓰지 말고 팀과 구조를 맞춘 뒤 옮기세요.
+기본 주소:
 
-Windows에서 `pnpm dev` 실행 중 `read ECONNRESET`이 반복되면 Cloudflare 개발 실행기를 제외한 로컬 시연 설정을 사용하세요. 프로젝트 루트에서 `pnpm exec vite --config vite.local.config.ts`를 실행하고 `http://127.0.0.1:5173`에 접속합니다. 이 실행 방식은 화면과 mock 로그인·매물을 확인하는 용도이며 D1/R2 등 Cloudflare 바인딩은 제공하지 않습니다.
+```text
+http://localhost:5173
+```
 
-PowerShell에서 환경파일을 준비하려면 `Copy-Item .env.example .env.local`, macOS/Linux에서는 `cp .env.example .env.local`을 사용하세요. API를 연결한 후 서버를 재시작합니다.
+터미널에 다른 주소가 나오면 터미널에 나온 주소로 접속하면 됨.
+
+종료:
+
+```text
+Ctrl + C
+```
+
+현재 샘플 모드는 환경변수 없이 바로 실행 가능함.
+
+---
+
+## 5. 오류 확인
+
+```powershell
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+세 개 전부 통과하면 정상임.
+
+현재 핵심 테스트 21개 들어가 있음.
+
+---
+
+# 브랜치
+
+| 브랜치    | 용도                  |
+| ------ | ------------------- |
+| `main` | 오류 없고 시연 가능한 최종 통합본 |
+| `fe`   | 프론트엔드 작업            |
+| `be`   | 백엔드 작업              |
+| `ai`   | AI 작업               |
+
+`main`에는 바로 작업하지 말 것.
+
+각자 담당 브랜치에서 작업하고 확인이 끝나면 Pull Request로 `main`에 합치면 됨.
+
+---
+
+## 프론트엔드 시작
+
+```powershell
+git switch fe
+git pull origin fe
+```
+
+## 백엔드 시작
+
+```powershell
+git switch be
+git pull origin be
+```
+
+## AI 시작
+
+```powershell
+git switch ai
+git pull origin ai
+```
+
+현재 브랜치 확인:
+
+```powershell
+git branch
+```
+
+이름 앞에 `*`가 붙어 있는 게 현재 브랜치임.
+
+---
+
+# 같은 파트에서 같이 작업할 때
+
+같은 브랜치에서 동시에 파일을 수정하면 충돌 날 수 있음.
+
+기능별 브랜치를 만들어서 작업하는 걸 권장함.
+
+프론트 예시:
+
+```powershell
+git switch fe
+git pull origin fe
+git switch -c feat/room-detail
+```
+
+백엔드 예시:
+
+```powershell
+git switch be
+git pull origin be
+git switch -c feat/login-api
+```
+
+AI 예시:
+
+```powershell
+git switch ai
+git pull origin ai
+git switch -c feat/ai-recommendation
+```
+
+| 이름          | 용도       | 예시                   |
+| ----------- | -------- | -------------------- |
+| `feat/`     | 기능 추가    | `feat/kakao-map`     |
+| `fix/`      | 오류 수정    | `fix/login-error`    |
+| `design/`   | 디자인 수정   | `design/room-card`   |
+| `refactor/` | 코드 구조 정리 | `refactor/gateway`   |
+| `docs/`     | 문서 수정    | `docs/readme-update` |
+
+---
+
+# 작업 내용 올리기
+
+변경 파일 확인:
+
+```powershell
+git status
+```
+
+변경 파일 추가:
+
+```powershell
+git add .
+```
+
+커밋:
+
+```powershell
+git commit -m "feat: 매물 상세 화면 추가"
+```
+
+현재 브랜치 올리기:
+
+```powershell
+git push -u origin 브랜치이름
+```
+
+예시:
+
+```powershell
+git push -u origin feat/room-detail
+```
+
+올린 다음 GitHub에서 Pull Request 만들면 됨.
+
+* 프론트 개인 작업 → `fe`
+* 백엔드 개인 작업 → `be`
+* AI 개인 작업 → `ai`
+* 각 파트에서 확인이 끝난 작업 → `main`
+
+---
+
+# 커밋 메시지
+
+| 종류         | 용도     | 예시                       |
+| ---------- | ------ | ------------------------ |
+| `feat`     | 기능 추가  | `feat: 지도 화면 추가`         |
+| `fix`      | 오류 수정  | `fix: 필터 오류 수정`          |
+| `design`   | 디자인 수정 | `design: 매물 카드 수정`       |
+| `refactor` | 코드 정리  | `refactor: API 요청 코드 정리` |
+| `docs`     | 문서 수정  | `docs: README 수정`        |
+| `chore`    | 설정 변경  | `chore: 패키지 설정 수정`       |
+
+커밋 메시지는 뭘 수정했는지 알아볼 수 있게만 작성하면 됨.
+
+---
+
+# 환경변수
+
+현재 샘플 화면만 확인할 때는 설정 안 해도 됨.
+
+실제 서버나 카카오 지도를 연결할 때 `.env.local` 파일 사용.
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+예시:
 
 ```dotenv
 NEXT_PUBLIC_DATA_MODE=http
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
-NEXT_PUBLIC_KAKAO_MAP_KEY=YOUR_JAVASCRIPT_KEY
+NEXT_PUBLIC_KAKAO_MAP_KEY=카카오_자바스크립트_키
 ```
 
-키와 환경변수 실제 값은 Git에 커밋하지 않습니다. OAuth client secret, Gemini 키, DB 인증값은 **백엔드 전용**입니다. Kakao JS 키는 공개 브라우저 키이므로 origin 제한을 설정합니다.
+환경변수를 수정했으면 `pnpm dev` 다시 실행해야 함.
 
-## 화면
+아래 정보는 GitHub에 올리지 말 것.
 
-| 경로                         | 제공 내용                                                    |
-| ---------------------------- | ------------------------------------------------------------ |
-| `/`                          | 검색·예산/생활 필터·정렬·매물 카드·지도·상세 시트·비교바     |
-| `/compare?ids=sun-01,sun-02` | 최대 2개 비용/거리/옵션 비교, 자연어 선호 입력, AI/규칙 요약 |
-| `/login`                     | 이메일 로그인·회원가입 검증, 카카오/Google 진입 버튼         |
-| `/landlord`                  | 집주인 전용 매물 관리·받은 문의                              |
-| `/landlord/new`              | 3단계 매물 등록·초안·사진·위치                               |
-| `/landlord/edit?id=...`      | 본인 매물 수정                                               |
-| `/chats`                     | 역할별 대화 목록·채팅, 방문 시간 제안, 읽음·신고·차단        |
-| `/auth/callback`             | 백엔드 인증 완료 후 세션 확인과 이전 화면 복귀               |
+* `.env.local`
+* Kakao API 비밀키
+* Google OAuth 비밀키
+* Gemini API 키
+* 데이터베이스 비밀번호
+* 사용자 개인정보
+* 개인 액세스 토큰
 
-필터는 URL에만 반영되며 계정에 영구 저장하지 않습니다. 비교 ID는 비교 URL에서 복원합니다. 비회원에게 탐색과 비교를 열어 두었습니다. 샘플 모드에서 로그인 화면의 **사용자로 체험 / 집주인으로 체험**으로 역할을 전환합니다. 회원가입도 선택한 역할의 임시 세션을 만들며 실제 계정·비밀번호는 저장하지 않습니다. 새로고침은 유지되지만 탭 종료 후 복구는 보장하지 않습니다. 같은 탭에서 체험 버튼으로 전환해야 등록한 매물과 문의를 함께 볼 수 있습니다.
+---
 
-## 폴더와 수정 위치
+# 폴더 설명
 
-| 위치                            | 책임                                         |
-| ------------------------------- | -------------------------------------------- |
-| `app/`                          | 얇은 라우트, 문서 metadata, 공통 스타일      |
-| `src/features/explore/`         | 탐색 화면과 서버 조회 상태                   |
-| `src/features/filters/`         | 조건 입력과 입력 오류                        |
-| `src/features/listings/`        | 매물 카드·상세                               |
-| `src/features/compare/`         | 선택바와 비교 화면                           |
-| `src/features/recommendations/` | 자연어 입력, 근거·한계·폴백 결과             |
-| `src/features/auth/`            | 계정 UI와 콜백                               |
-| `src/features/maps/`            | 지도 UI, Kakao SDK 어댑터                    |
-| `src/contracts/schemas.ts`      | 공유 DTO·Zod 응답 검증·식별자 카탈로그       |
-| `src/domain/rooms.ts`           | 계산·조건 일치·정렬·규칙 요약                |
-| `src/services/gateway.ts`       | 공통 Gateway, HTTP/샘플 구현, CSRF·오류·취소 |
-| `src/services/mock/data.ts`     | 분리된 샘플 데이터                           |
-| `src/shared/`                   | 공통 상태·UI·선택적 WebMCP 연결              |
-| `components/ui/`                | 접근성 기반 Radix/shadcn 공통 UI             |
-| `tests/`                        | 핵심 계산·입력·계약·API 폴백 테스트          |
-| `docs/`                         | API 계약·OpenAPI·작업 분담·출처·검증 기록    |
+| 폴더                              | 설명                |
+| ------------------------------- | ----------------- |
+| `app/`                          | 페이지 주소와 전체 레이아웃   |
+| `components/`                   | 공용 UI             |
+| `src/features/`                 | 기능별 프론트 코드        |
+| `src/features/auth/`            | 로그인 및 회원가입        |
+| `src/features/maps/`            | 지도                |
+| `src/features/compare/`         | 매물 비교             |
+| `src/features/recommendations/` | AI 추천 화면          |
+| `src/contracts/`                | 프론트와 백엔드 데이터 형식   |
+| `src/services/`                 | 실제 API와 샘플 데이터 연결 |
+| `src/services/mock/`            | 샘플 매물 데이터         |
+| `tests/`                        | 테스트 코드            |
+| `docs/`                         | API와 협업 문서        |
+| `public/`                       | 이미지와 공개 파일        |
 
-React 19 + TypeScript, App Router 구조, Vite/Vinext, Tailwind 4, Radix, Zod를 사용합니다. **실행 엔진은 일반 Next CLI가 아닌 Vinext입니다.** 기능 코드의 서버 접근은 Gateway에 모았습니다. 다른 호스팅/런타임으로 옮길 때 `app`, `src`, `components`, `lib`, `public`을 재사용하고 해당 호스트의 빌드 설정을 검증하세요.
+처음부터 모든 폴더를 볼 필요는 없고 자기 담당 부분부터 보면 됨.
 
-## 팀원에게 먼저 공유할 문서
+---
 
-0. [이번 변경 적용·시연](docs/APPLY_UPDATE.md), [집주인 기능 BE 인수인계](docs/LANDLORD_HANDOFF.md), [채팅 BE 연동 계약](docs/CHAT_HANDOFF.md), [작업 맥락](docs/WORK_CONTEXT.md)
-1. [API 계약](docs/API_CONTRACT.md): 금액·거리·null·세션·CSRF·AI 응답 규칙
-2. [7일 작업 분담](docs/TEAM_HANDOFF.md): 역할별 파일, PR 규칙, 미결정 요구사항
-3. [OpenAPI 3.1](docs/openapi.json): FastAPI DTO 설계용 계약
-4. [데이터·사진 출처](docs/DATA_SOURCES.md)
-5. [검증 기록과 남은 연동](docs/VALIDATION.md)
+# 백엔드 작업 시 확인
 
-## 검증 명령
+서버 연결은 아래 파일을 기준으로 작업.
 
-```sh
+```text
+src/services/gateway.ts
+```
+
+프론트와 백엔드가 주고받는 데이터 형식:
+
+```text
+src/contracts/schemas.ts
+```
+
+화면 컴포넌트에서 서버 주소를 직접 작성하거나 `fetch`를 여기저기 추가하지 말 것.
+
+API 데이터 형식을 바꿔야 하면 프론트 담당자에게 먼저 말해줘.
+
+데이터 형식이 바뀌면 아래 항목도 같이 수정해야 할 수 있음.
+
+* `src/contracts/schemas.ts`
+* 샘플 데이터
+* API 문서
+* 테스트 코드
+* 관련 프론트 화면
+
+---
+
+# AI 작업 시 확인
+
+AI는 사용자가 입력한 조건을 분석하고 실제 매물 중에서 적절한 매물을 추천하는 방식으로 연결할 예정.
+
+AI 응답에는 아래 정보가 필요함.
+
+* 추천한 매물 ID
+* 추천 이유
+* 아쉬운 점이나 주의할 점
+* 조건에 맞는 매물이 없을 때 보여줄 내용
+
+AI가 존재하지 않는 매물을 새로 만들어서 추천하면 안 됨.
+
+현재 프론트에 있는 실제 매물 ID를 기준으로 결과를 보내줘야 함.
+
+AI 서버에 오류가 생겨도 서비스 전체가 멈추지 않게 현재 기본 추천 결과는 유지할 예정.
+
+---
+
+# 앞으로 해야 할 작업
+
+1. 프론트와 백엔드 데이터 형식 확정
+2. 실제 원룸 목록과 상세 데이터 연결
+3. 카카오 지도 연결
+4. 로그인 및 회원가입 연결
+5. Kakao, Google OAuth 연결
+6. Gemini AI 추천 연결
+7. 찜 목록과 사용자 데이터 저장
+8. 모바일 화면 최종 확인
+9. 전체 기능 테스트
+10. 배포 및 발표 준비
+
+---
+
+# 작업 규칙
+
+* 작업 시작 전에 담당 브랜치에서 `git pull` 하기
+* `main`에 바로 작업하지 않기
+* 공용 파일 수정 전에 팀원에게 말하기
+* API 형식 마음대로 바꾸지 않기
+* 비밀키 GitHub에 올리지 않기
+* 작업 끝나면 수정한 내용 공유하기
+* 오류가 해결되지 않으면 오류 화면과 실행한 명령어 같이 공유하기
+* Pull Request 전에 테스트 명령어 실행하기
+
+```powershell
 pnpm typecheck
 pnpm test
 pnpm build
-pnpm format:check
 ```
-
-핵심 테스트 18개를 제공합니다. 환경 의존적인 실인증/실지도/Gemini 성공은 별도 통합 검증이 필요합니다. UI 작업 후 390px와 데스크톱에서 확인하고, 오류·빈 결과·값 미상도 확인하세요. 코드는 `pnpm format`으로 동일 형식을 적용할 수 있습니다.
-
-## 배포
-
-이 전달본에는 Sites 기반 비공개 배포 연결용 설정이 포함되어 있습니다. 현재 배포 서비스의 연결 오류로 원격 소스 동기화와 웹 배포는 완료하지 못했습니다. ZIP으로 로컬 실행할 수 있습니다. `pnpm build`는 Cloudflare Worker와 클라이언트 산출물을 만듭니다. 실행/빌드 보조 스크립트와 `.openai/hosting.json`은 현재 배포 연결을 유지하므로 불필요하게 삭제하지 마세요. 로컬 `.sites-runtime` 설정은 Git/소스 ZIP에 넣지 않습니다.
-
-다른 호스팅으로 배포한다면 먼저 런타임 지원을 확인하고, FE 환경변수와 실제 API origin/CORS를 맞추세요. 백엔드 FastAPI·Supervisor·DB·Gemini 배포는 별도의 팀 작업입니다. 이 프론트 소스에 서버 비밀키를 추가하지 않습니다.
-
-## 현재 제한
-
-- 6개 가상 매물과 같은 탭에 임시 저장한 직접 등록 매물. 실제 매물/부동산 연락처/공공데이터를 확보하지 않았습니다.
-- 키가 없는 지도는 명확히 표시된 모식도입니다. 실제 Kakao JS SDK 어댑터는 포함합니다.
-- AI 연결 전에는 규칙 기반 요약입니다. 자연어 해석·종합 점수·추천 순위는 표시하지 않습니다.
-- 역할 선택·체험 세션·집주인 화면·HTTP 연결부를 제공하며 실제 서버 세션·OAuth·같은 이메일 계정 통합은 BE 작업입니다.
-- 편의시설 500m, 월세+관리비 산식, 비밀번호 정책·약관은 팀 확정 필요 항목입니다.
-- 찜/계약/실시간 위치/길찾기는 제공된 핵심 범위에 없어 추가하지 않았습니다.
-
-샘플 사진과 라이브러리의 라이선스는 출처 문서를 따릅니다. 팀 소스의 공개 라이선스는 팀이 결정해야 하므로 임의 지정하지 않았습니다.
