@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import '../vendor/shadcn-tailwind-4.13.0.css';
+@import '../src/features/landlord/landlord.css';
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -2852,6 +2853,59 @@ img {
 }
 
 /* Shared reading contrast: secondary copy remains readable on white. */
+.chat-header-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  color: #546b56;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.chat-header-link:hover,
+.chat-header-link.active {
+  background: #eaf0e6;
+  color: #3e6846;
+}
+.chat-header-link b {
+  display: inline-grid;
+  place-items: center;
+  background: #dc7850;
+  color: white;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 3px;
+  border-radius: 10px;
+  font-size: 10px;
+}
+.chat-detail-cta {
+  margin-bottom: 8px;
+}
+.owner-chat-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 15px;
+  color: #bd704e;
+  font-size: 13px;
+  font-weight: 700;
+}
+@media (max-width: 700px) {
+  .chat-header-link span {
+    display: none;
+  }
+  .chat-header-link {
+    padding: 5px;
+  }
+  .owner-chat-link {
+    margin: 12px 0 0;
+  }
+  .chat-detail-cta {
+    margin: 0 0 8px;
+  }
+}
 .card-location,
 .room-meta,
 .workspace-heading p,

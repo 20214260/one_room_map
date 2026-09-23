@@ -2,8 +2,8 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Sunroom frontend integration contract",
-    "version": "1.0.0",
-    "description": "Proposed FastAPI contract. See API_CONTRACT.md for session, CSRF, null and AI validation rules. No backend implementation is included."
+    "version": "1.1.0",
+    "description": "Proposed FastAPI contract. See API_CONTRACT.md for session, CSRF, null and AI validation rules. No backend implementation is included. Landlord extension: LANDLORD_HANDOFF.md."
   },
   "servers": [
     {
@@ -50,6 +50,58 @@
             }
           }
         ]
+      },
+      "post": {
+        "operationId": "post_rooms",
+        "description": "Landlord only. Server derives owner ID from session; production starts pending_review.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoomSubmissionResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomSubmission"
+              }
+            }
+          }
+        }
       }
     },
     "/rooms/{id}": {
@@ -255,9 +307,12 @@
                   },
                   "termsVersion": {
                     "type": "string"
+                  },
+                  "role": {
+                    "$ref": "#/components/schemas/Role"
                   }
                 },
-                "required": ["email", "password", "agreed", "termsVersion"]
+                "required": ["email", "password", "agreed", "termsVersion", "role"]
               }
             }
           }
@@ -418,6 +473,472 @@
           }
         ]
       }
+    },
+    "/owner/rooms": {
+      "get": {
+        "operationId": "get_owner_rooms",
+        "description": "Landlord only. Private submission/contact visible only to its owner.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerListings"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owner/rooms/{id}": {
+      "patch": {
+        "operationId": "patch_owner_rooms_id",
+        "description": "Owner only. Full submission replacement; server returns resulting review status.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerListing"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoomSubmission"
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_owner_rooms_id",
+        "description": "Owner only. Delete listing and associated inbox entries.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owner/rooms/{id}/status": {
+      "patch": {
+        "operationId": "patch_owner_rooms_id_status",
+        "description": "Owner only. Server validates transitions. Owner cannot approve pending_review.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerListing"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "$ref": "#/components/schemas/ListingStatus"
+                  }
+                },
+                "required": ["status"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owner/inquiries": {
+      "get": {
+        "operationId": "get_owner_inquiries",
+        "description": "Landlord only; own inquiries without reply contact.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Inbox"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owner/inquiries/{id}/read": {
+      "patch": {
+        "operationId": "patch_owner_inquiries_id_read",
+        "description": "Owner only; mark read.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Success"
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rooms/{id}/inquiries": {
+      "post": {
+        "operationId": "post_rooms_id_inquiries",
+        "description": "Signed-in user. Path and body roomId must match. Relay contact on server only.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InquiryResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InquiryRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rooms/draft": {
+      "post": {
+        "operationId": "post_rooms_draft",
+        "description": "Landlord only. Facts-only draft; do not persist pasted text. No automatic save.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/owner/photos": {
+      "post": {
+        "operationId": "post_owner_photos",
+        "description": "Landlord only. Validate and store image, return own public path or HTTPS URL.",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": ["file"]
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -439,7 +960,7 @@
             "type": "string"
           },
           "kind": {
-            "enum": ["sample", "licensed", "public"]
+            "enum": ["sample", "licensed", "public", "owner"]
           },
           "note": {
             "type": "string"
@@ -726,9 +1247,12 @@
           },
           "provider": {
             "enum": ["email", "kakao", "google"]
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
           }
         },
-        "required": ["id", "name", "email", "provider"]
+        "required": ["id", "name", "email", "provider", "role"]
       },
       "RecommendationRequest": {
         "type": "object",
@@ -857,6 +1381,476 @@
           }
         },
         "required": ["error"]
+      },
+      "Role": {
+        "type": "string",
+        "enum": ["seeker", "landlord"]
+      },
+      "Contact": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "enum": ["phone", "kakao"]
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "required": ["method", "value"]
+      },
+      "Photo": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "alt": {
+            "type": "string"
+          }
+        },
+        "required": ["url", "alt"]
+      },
+      "RoomSubmission": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "locationHint": {
+            "type": "object",
+            "properties": {
+              "zone": {
+                "enum": ["front-gate", "back-gate", "other"]
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60
+              }
+            },
+            "required": ["zone", "detail"]
+          },
+          "coordinates": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90
+                  },
+                  "lng": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180
+                  }
+                },
+                "required": ["lat", "lng"]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "rent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "contact": {
+            "$ref": "#/components/schemas/Contact"
+          },
+          "deposit": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "maintenance": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "area": {
+            "type": ["number", "null"],
+            "exclusiveMinimum": 0
+          },
+          "floor": {
+            "type": ["integer", "null"]
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "aircon": {
+                "type": "boolean"
+              },
+              "washer": {
+                "type": "boolean"
+              },
+              "fridge": {
+                "type": "boolean"
+              },
+              "induction": {
+                "type": "boolean"
+              },
+              "desk": {
+                "type": "boolean"
+              },
+              "closet": {
+                "type": "boolean"
+              },
+              "elevator": {
+                "type": "boolean"
+              }
+            }
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "photos": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Photo"
+            },
+            "maxItems": 10
+          },
+          "pastedListingText": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": ["title", "locationHint", "rent", "contact"]
+      },
+      "RoomSubmissionResponse": {
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string"
+          },
+          "status": {
+            "enum": ["pending_review", "published"]
+          }
+        },
+        "required": ["roomId", "status"]
+      },
+      "ListingStatus": {
+        "enum": ["pending_review", "published", "hidden", "closed"]
+      },
+      "OwnerListing": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ownerId": {
+            "type": "string"
+          },
+          "submission": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60
+              },
+              "locationHint": {
+                "type": "object",
+                "properties": {
+                  "zone": {
+                    "enum": ["front-gate", "back-gate", "other"]
+                  },
+                  "detail": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  }
+                },
+                "required": ["zone", "detail"]
+              },
+              "coordinates": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "lat": {
+                        "type": "number",
+                        "minimum": -90,
+                        "maximum": 90
+                      },
+                      "lng": {
+                        "type": "number",
+                        "minimum": -180,
+                        "maximum": 180
+                      }
+                    },
+                    "required": ["lat", "lng"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rent": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "contact": {
+                "$ref": "#/components/schemas/Contact"
+              },
+              "deposit": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "maintenance": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "area": {
+                "type": ["number", "null"],
+                "exclusiveMinimum": 0
+              },
+              "floor": {
+                "type": ["integer", "null"]
+              },
+              "options": {
+                "type": "object",
+                "properties": {
+                  "aircon": {
+                    "type": "boolean"
+                  },
+                  "washer": {
+                    "type": "boolean"
+                  },
+                  "fridge": {
+                    "type": "boolean"
+                  },
+                  "induction": {
+                    "type": "boolean"
+                  },
+                  "desk": {
+                    "type": "boolean"
+                  },
+                  "closet": {
+                    "type": "boolean"
+                  },
+                  "elevator": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "photos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Photo"
+                },
+                "maxItems": 10
+              }
+            },
+            "required": ["title", "locationHint", "rent", "contact"]
+          },
+          "status": {
+            "$ref": "#/components/schemas/ListingStatus"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": ["id", "ownerId", "submission", "status", "updatedAt"]
+      },
+      "OwnerListings": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OwnerListing"
+            }
+          }
+        },
+        "required": ["items"]
+      },
+      "InboxItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "roomId": {
+            "type": "string"
+          },
+          "roomTitle": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "read": {
+            "type": "boolean"
+          }
+        },
+        "required": ["id", "roomId", "roomTitle", "message", "createdAt", "read"]
+      },
+      "Inbox": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InboxItem"
+            }
+          }
+        },
+        "required": ["items"]
+      },
+      "InquiryRequest": {
+        "type": "object",
+        "properties": {
+          "roomId": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "replyContact": {
+            "$ref": "#/components/schemas/Contact"
+          }
+        },
+        "required": ["roomId", "message", "replyContact"]
+      },
+      "InquiryResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "enum": ["sent", "failed"]
+          }
+        },
+        "required": ["status"]
+      },
+      "DraftRequest": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "locationHint": {
+            "type": "object",
+            "properties": {
+              "zone": {
+                "enum": ["front-gate", "back-gate", "other"]
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 60
+              }
+            },
+            "required": ["zone", "detail"]
+          },
+          "rent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deposit": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "maintenance": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "aircon": {
+                "type": "boolean"
+              },
+              "washer": {
+                "type": "boolean"
+              },
+              "fridge": {
+                "type": "boolean"
+              },
+              "induction": {
+                "type": "boolean"
+              },
+              "desk": {
+                "type": "boolean"
+              },
+              "closet": {
+                "type": "boolean"
+              },
+              "elevator": {
+                "type": "boolean"
+              }
+            }
+          },
+          "pastedListingText": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": []
+      },
+      "DraftResponse": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "enum": ["ai", "rules"]
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "hints": {
+            "type": "object",
+            "properties": {
+              "rent": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "deposit": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
+              "maintenance": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              }
+            },
+            "required": []
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["mode", "description", "hints", "limitations"]
+      },
+      "UploadResponse": {
+        "type": "object",
+        "properties": {
+          "photo": {
+            "$ref": "#/components/schemas/Photo"
+          }
+        },
+        "required": ["photo"]
       }
     },
     "securitySchemes": {

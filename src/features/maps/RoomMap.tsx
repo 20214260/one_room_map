@@ -148,7 +148,10 @@ export function RoomMap({
               {rooms
                 .filter((r) => r.coordinates)
                 .map((r) => {
-                  const p = positions[r.id] ?? [50, 50];
+                  const p = positions[r.id] ?? [
+                    Math.max(5, Math.min(95, ((r.coordinates!.lng - 127.475) / 0.013) * 100)),
+                    Math.max(8, Math.min(90, ((34.975 - r.coordinates!.lat) / 0.01) * 100)),
+                  ];
                   return (
                     <button
                       key={r.id}
