@@ -2,7 +2,7 @@
 
 이 문서는 기존 백엔드가 있다고 가정하지 않고 만든 **연동 제안**입니다. 실제 서버는 포함하지 않습니다. 먼저 FE/BE가 이 계약을 합의하고, 다른 이름을 쓰기로 했다면 `src/services/gateway.ts`에서 변환하세요. 화면 컴포넌트에 서버 DTO를 직접 퍼뜨리지 않습니다.
 
-검증 기준은 `src/contracts/schemas.ts`. 기계 판독 명세는 `docs/openapi.json`입니다. 화면은 `Gateway` 인터페이스에만 의존하고, `mock` / `http` 구현을 교체합니다.
+검증 기준은 `src/contracts/schemas.ts`와 `src/contracts/landlord.ts`. 집주인 추가 기능은 [LANDLORD_HANDOFF.md](LANDLORD_HANDOFF.md)를 함께 보세요. 채팅 연동은 [CHAT_HANDOFF.md](CHAT_HANDOFF.md) 및 `src/contracts/chat.ts`에서 정의합니다. 기존 API의 기계 판독 명세는 `docs/openapi.json`입니다. 화면은 `Gateway` 인터페이스에만 의존하고, `mock` / `http` 구현을 교체합니다.
 
 ## 공통 규칙
 
@@ -22,11 +22,13 @@
 | GET    | `/rooms/{id}`                  | 공개 매물 ID                                        | `Room`                           |
 | GET    | `/auth/csrf`                   | 없음, 비회원도 가능                                 | `{token: string}`                |
 | GET    | `/auth/me`                     | 세션 쿠키                                           | `User`, 비회원은 401             |
-| POST   | `/auth/register`               | `{email,password,agreed:true,termsVersion}`         | `User`, 세션 쿠키 설정           |
+| POST   | `/auth/register`               | `{email,password,role,agreed:true,termsVersion}`    | `User`, 세션 쿠키 설정           |
 | POST   | `/auth/login`                  | `{email,password}`                                  | `User`, 세션 쿠키 설정           |
 | POST   | `/auth/logout`                 | 없음                                                | 204, 쿠키 만료                   |
 | POST   | `/auth/oauth/{provider}/start` | `{returnTo: '/compare?ids=...'}`                    | `{authorizationUrl}`             |
 | POST   | `/recommendations`             | `{roomIds,filters,prompt}`                          | `Recommendation`                 |
+| POST   | `/rooms`                       | `RoomSubmission` (집주인 등록, 아래 참고)           | `{roomId, status}`               |
+| POST   | `/rooms/{id}/inquiries`        | `{roomId,message,replyContact}`                     | `{status: 'sent'\|'failed'}`     |
 
 샘플 규모에서는 현재 검색의 전체 결과를 반환합니다. 페이지네이션은 이번 계약에 없습니다. 매물이 크게 늘어나면 커서와 지도 클러스터 조회 API를 먼저 계약에 추가하세요. 현재 지도 구역 수는 조회 결과의 0.001도 좌표 버킷 수이며 행정 구역 수가 아닙니다.
 
@@ -70,7 +72,49 @@
 | distanceSource                          | Source 또는 null                  | 주변 환경 데이터 출처                 |
 | published                               | boolean                           | 서버에서 공개 승인 검증               |
 
-Source: `{name,url,collectedAt,license,kind,note}`. kind는 `sample | licensed | public`, url은 URL 또는 null. 표준 옵션과 시설 식별자는 `schemas.ts`가 단일 기준입니다. 사진 URL은 자체 공개 경로 또는 HTTPS 이미지 URL을 사용하고, 주소·연락처·소유자 개인정보는 응답에 넣지 않습니다.
+Source: `{name,url,collectedAt,license,kind,note}`. kind는 `sample | licensed | public | owner`(`owner` = 집주인·부동산 자체 등록), url은 URL 또는 null. 표준 옵션과 시설 식별자는 `schemas.ts`가 단일 기준입니다. 사진 URL은 자체 공개 경로 또는 HTTPS 이미지 URL을 사용하고, 주소·연락처·소유자 개인정보는 응답에 넣지 않습니다.
+
+### 매물 등록 (POST /rooms) — 집주인·부동산 직접 등록
+
+크롤링/샘플과 별개로, 집주인·부동산이 최소 정보만으로 매물을 직접 올릴 수 있는 경로입니다. `RoomSubmissionSchema`(`src/contracts/schemas.ts`) 기준이며 기존 최소 입력 계약을 유지하며 새 등록 UI에서는 지도 좌표도 선택합니다.
+
+```json
+{
+  "title": "정문 1분 풀옵션 원룸",
+  "locationHint": { "zone": "front-gate", "detail": "공대 후문 도보 3분" },
+  "rent": 320000,
+  "contact": { "method": "phone", "value": "010-0000-0000" },
+
+  "deposit": 3000000,
+  "maintenance": 50000,
+  "area": 23.1,
+  "floor": 2,
+  "options": { "aircon": true, "washer": true },
+  "description": "2018년 신축, 풀옵션.",
+  "photos": [{ "url": "https://...", "alt": "정면 사진" }],
+  "pastedListingText": "기존 게시판 글을 그대로 붙여넣으면 위 필드를 자동으로 채우는 데 씁니다. 저장하지 않습니다."
+}
+```
+
+- **1단(필수)**: `title`, `locationHint`(`zone: front-gate|back-gate|other` + `detail` 자유 텍스트 한 줄), `rent`, `contact`. 이것만 있으면 등록됩니다.
+- **2단(선택)**: `deposit`/`maintenance`/`area`/`floor`/`options`/`description`/`photos`. 비워도 되고, 등록 후 보완 가능합니다. `Room` 응답에서는 그대로 null/빈 배열로 노출됩니다(예: `facilities`는 아직 도보 경로 데이터가 없어 빈 배열, `schoolDistance`는 null — 백엔드가 카카오 길찾기 등으로 채우기 전까지).
+- `coordinates: {lat,lng} | null`은 하위 호환을 위해 계약상 선택입니다. 새 UI는 지도 클릭으로 좌표를 필수 선택합니다. 서버는 유효 범위를 검증하고 그대로 보존해야 합니다. 생략한 이전 요청만 zone 앵커로 변환하며 명시적인 null은 보존합니다. 실제 주소 검증/지오코딩은 BE 작업입니다.
+- `pastedListingText`는 저장하지 않고 자동채움 보조에만 씁니다. 새 UI는 `POST /rooms/draft`로 보내고, mock에서는 금액만 추출해 입력 사실에 기반한 초안을 만듭니다. 기존 값은 덮어쓰지 않으며 사용자 확인 후 적용합니다. 연락처 자동 입력은 하지 않습니다. 실제 AI는 BE가 연결합니다.
+- **연락처는 응답 `Room`에 절대 포함하지 않습니다.** 학생이 매물을 보고 연락하고 싶으면 `POST /rooms/{id}/inquiries`로 메시지를 보내고, 서버가 등록자에게 중계합니다(전화번호/카카오 링크를 양쪽 모두에게 직접 노출하지 않음 — 문의 중계 방식, 팀 합의 완료).
+- 등록 직후 `status`는 `pending_review`가 기본이며 검수 후 `published: true`로 노출 대상이 됩니다. **mock 모드는 검수 단계가 없어 등록 즉시 `published: true`로 처리**합니다 — 실제 서비스에서는 반드시 허위매물/스팸 검수를 거쳐야 합니다(AI 검증은 별도 논의 대상, 아직 미구현).
+- `source.kind`는 `owner`로 기록되어 크롤링/샘플 매물과 구분됩니다.
+
+### 문의하기 (POST /rooms/{id}/inquiries)
+
+```json
+{
+  "roomId": "owner-abc123",
+  "message": "이번 주말에 방 볼 수 있을까요?",
+  "replyContact": { "method": "kakao", "value": "https://open.kakao.com/..." }
+}
+```
+
+응답은 `{ "status": "sent" }` 또는 `{ "status": "failed" }`뿐입니다. 서버는 `roomId`로 등록자 연락처를 조회해 메시지를 전달하고, 학생의 `replyContact` 역시 응답에 그대로 반환하지 않습니다 — 두 연락처 모두 서버 밖으로 노출되지 않는 중계 구조입니다.
 
 ### AI 요청과 응답
 
@@ -106,9 +150,11 @@ Source: `{name,url,collectedAt,license,kind,note}`. kind는 `sample | licensed |
 
 ## 인증 연결
 
+`User.role`은 `seeker | landlord`입니다. 이전 응답에 role이 없으면 프론트는 seeker로 처리합니다. 운영 권한은 DB/서버 세션으로 검증하고 입력된 role이나 ownerId를 신뢰하지 마세요. OAuth 신규 역할 결정·집주인 전환 정책은 별도 BE 합의가 필요합니다.
+
 서버가 세션을 **HttpOnly + Secure 쿠키**로 소유합니다. 브라우저 토큰 저장소(localStorage 등)는 사용하지 않습니다. 최근 활동 기준 7일 갱신은 백엔드에서 구현합니다.
 
-모든 POST 전 `/auth/csrf`를 호출하고 `X-CSRF-Token`을 전송합니다. 비회원 AI 요청에도 같은 규칙을 씁니다. 서버는 Origin/CSRF를 검증합니다. CORS는 지정된 FE origin만 허용하고 credentials=true 및 `Content-Type`, `X-CSRF-Token`을 허용합니다. 운영은 같은 사이트의 `/api/v1` 프록시 구성을 권장합니다. 서로 다른 사이트면 SameSite 정책과 브라우저의 서드파티 쿠키 제한을 함께 검증해야 합니다.
+모든 POST/PATCH/DELETE 전 `/auth/csrf`를 호출하고 `X-CSRF-Token`을 전송합니다. 비회원 AI 요청에도 같은 규칙을 씁니다. 서버는 Origin/CSRF를 검증합니다. CORS는 지정된 FE origin만 허용하고 credentials=true 및 `Content-Type`, `X-CSRF-Token`을 허용합니다. 운영은 같은 사이트의 `/api/v1` 프록시 구성을 권장합니다. 서로 다른 사이트면 SameSite 정책과 브라우저의 서드파티 쿠키 제한을 함께 검증해야 합니다.
 
 OAuth 흐름: 버튼 → BE `/start` → 카카오/Google → **BE 콜백에서 state, PKCE/nonce(해당 방식), code 검증 및 세션 발급** → FE `/auth/callback?returnTo=...` → `/auth/me` 확인 → 기존 화면 복귀. 제공자 토큰/비밀키를 FE URL이나 JSON에 넣지 않습니다. start의 authorizationUrl은 HTTPS의 `kauth.kakao.com` / `accounts.google.com`만 프론트에서 허용합니다.
 

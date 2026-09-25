@@ -1,13 +1,36 @@
 'use client';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ArrowUpRight, House, LogOut, MapPin } from 'lucide-react';
+import { ArrowUpRight, House, LogOut, MapPin, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useApp } from './AppProvider';
 export function Header() {
   const router = useRouter();
   const { selected, user, setUser, api, filters } = useApp();
   const path = usePathname();
+  const [unread, setUnread] = useState(0);
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    const update = () => {
+      if (document.visibilityState === 'visible')
+        api
+          .listChats()
+          .then((r) => {
+            if (active) setUnread(r.items.reduce((n, item) => n + item.unreadCount, 0));
+          })
+          .catch(() => {});
+    };
+    update();
+    const timer = setInterval(update, 12000);
+    window.addEventListener('sunroom:chat-changed', update);
+    return () => {
+      active = false;
+      clearInterval(timer);
+      window.removeEventListener('sunroom:chat-changed', update);
+    };
+  }, [api, user]);
   return (
     <header className="site-header">
       <Link href="/" className="brand" aria-label="순룸 홈">
@@ -30,6 +53,20 @@ export function Header() {
         </Link>
       </nav>
       <div className="header-right">
+        {user && (
+          <Link
+            className={`chat-header-link ${path === '/chats' ? 'active' : ''}`}
+            href="/chats"
+            aria-label={`채팅${unread ? `, 읽지 않은 메시지 ${unread}개` : ''}`}
+          >
+            <MessageCircle size={17} />
+            <span>채팅</span>
+            {unread > 0 && <b>{unread > 99 ? '99+' : unread}</b>}
+          </Link>
+        )}
+        <Link className="owner-header-link" href="/landlord">
+          {user?.role === 'landlord' ? '내 매물 관리' : '방 등록'}
+        </Link>
         <span className="campus">
           <MapPin size={16} /> 순천대학교
         </span>
@@ -45,7 +82,7 @@ export function Header() {
               }
             }}
           >
-            {user.name}
+            <span className="owner-session-name">{user.name}</span>
             <LogOut size={16} />
           </button>
         ) : (

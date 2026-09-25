@@ -13,6 +13,7 @@ try {
       'src/domain/rooms.ts',
       'src/services/gateway.ts',
       'src/services/mock/data.ts',
+      'src/features/landlord/editor-form.ts',
       '--outDir',
       out,
       '--module',

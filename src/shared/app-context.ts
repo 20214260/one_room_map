@@ -13,6 +13,7 @@ export type AppState = {
   user: User | null;
   setUser: (u: User | null) => void;
   authError: string | null;
+  authLoading: boolean;
 };
 export const AppContext = createContext<AppState | null>(null);
 export function useApp() {

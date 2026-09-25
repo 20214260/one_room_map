@@ -1,7 +1,8 @@
 'use client';
 import { track } from '../../services/analytics';
 import { useEffect, useState } from 'react';
-import { Check, Minus, Footprints, Scale, Info } from 'lucide-react';
+import Link from 'next/link';
+import { Check, Minus, Footprints, Scale, Info, MessageCircle } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { optionIds, optionLabels, facilityLabels, type Room } from '../../contracts/schemas';
 import { money, monthlyCost, distance } from '../../domain/rooms';
@@ -9,8 +10,9 @@ import { useApp } from '../../shared/AppProvider';
 import { RoomPhoto } from '../../shared/RoomPhoto';
 import { ErrorState } from '../../shared/Status';
 import { Skeleton } from '@/components/ui/skeleton';
+import { InquiryForm } from './InquiryForm';
 export function RoomDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const { api, selected, toggleRoom } = useApp();
+  const { api, selected, toggleRoom, user } = useApp();
   const [room, setRoom] = useState<Room | null>(null),
     [error, setError] = useState(''),
     [attempt, setAttempt] = useState(0);
@@ -58,6 +60,13 @@ export function RoomDetail({ id, onClose }: { id: string | null; onClose: () => 
               <p className="eyebrow">{room.neighborhood}</p>
               <h2>{room.title}</h2>
               <p>{room.description}</p>
+              {room.source.kind === 'owner' && room.photos.length > 1 && (
+                <div className="owner-detail-gallery">
+                  {room.photos.map((p, i) => (
+                    <img key={i} src={p.url} alt={p.alt || `방 사진 ${i + 1}`} loading="lazy" />
+                  ))}
+                </div>
+              )}
               <div className="cost-highlight">
                 <span>
                   월 부담액 <small>월세 + 관리비</small>
@@ -147,12 +156,27 @@ export function RoomDetail({ id, onClose }: { id: string | null; onClose: () => 
                     )}
                   </>
                 )}
-                <p className="field-help">
-                  사진: Pexels · Unsplash / 실제 순천 매물 사진이 아닌 공간 참고 이미지
-                </p>
+                {room.source.kind === 'sample' && (
+                  <p className="field-help">
+                    사진: Pexels · Unsplash / 실제 순천 매물 사진이 아닌 공간 참고 이미지
+                  </p>
+                )}
               </section>
+              {room.source.kind === 'owner' && <InquiryForm key={room.id} roomId={room.id} />}
             </div>
             <div className="detail-footer">
+              {room.source.kind === 'owner' && user?.role !== 'landlord' && (
+                <Link
+                  className="btn primary chat-detail-cta"
+                  href={
+                    user
+                      ? `/chats?room=${encodeURIComponent(room.id)}`
+                      : `/login?returnTo=${encodeURIComponent(`/chats?room=${encodeURIComponent(room.id)}`)}`
+                  }
+                >
+                  <MessageCircle size={17} /> 채팅으로 문의하기
+                </Link>
+              )}
               <button
                 className={`btn ${selected.includes(room.id) ? 'secondary' : 'primary'}`}
                 onClick={() => toggleRoom(room.id)}

@@ -13,7 +13,8 @@ export function AppProvider({ config, children }: { config: AppConfig; children:
   const [filters, setFilters] = useState<Filters>(emptyFilters),
     [selected, setSelected] = useState<string[]>([]),
     [user, setUser] = useState<User | null>(null),
-    [authError, setAuthError] = useState<string | null>(null);
+    [authError, setAuthError] = useState<string | null>(null),
+    [authLoading, setAuthLoading] = useState(true);
   useEffect(() => {
     setFilters(readFilters(new URLSearchParams(location.search)));
     const c = new AbortController();
@@ -22,6 +23,9 @@ export function AppProvider({ config, children }: { config: AppConfig; children:
       .then(setUser)
       .catch((e) => {
         if (!c.signal.aborted) setAuthError(e.message);
+      })
+      .finally(() => {
+        if (!c.signal.aborted) setAuthLoading(false);
       });
     return () => c.abort();
   }, [api]);
@@ -45,6 +49,7 @@ export function AppProvider({ config, children }: { config: AppConfig; children:
         user,
         setUser,
         authError,
+        authLoading,
       }}
     >
       <WebMCPBridge />
