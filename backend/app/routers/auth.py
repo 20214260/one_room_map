@@ -7,7 +7,7 @@
 | POST   | /auth/login    | User + 세션 쿠키 (실패 401)    |
 | POST   | /auth/logout   | 204, 쿠키 만료                |
 
-OAuth(/auth/oauth/{provider}/start)는 다음 단계에서 추가.
+소셜 로그인(/auth/oauth/...)은 routers/oauth.py.
 """
 
 import re

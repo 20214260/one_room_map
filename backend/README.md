@@ -56,6 +56,7 @@ python -m pytest -q
 - `test_auth.py`: 가입·로그인·로그아웃, CSRF/Origin 거절, 쿠키 HttpOnly, 비밀번호 규칙, 요청 빈도 제한
 - `test_owner.py`: 매물 등록·수정·상태·삭제, 남의 매물 접근 차단, 연락처 비공개, 문의 흐름
 - `test_photos.py`: 실제 이미지만 허용, 크기·형식 제한, EXIF 제거, Supabase 호출 형식 (저장소는 가짜로 대체)
+- `test_oauth.py`: 카카오·구글 로그인 (state·PKCE·리디렉트 검증, 계정 연결 정책). 메모리 SQLite와 가짜 제공자를 써서 **DB·키 없이 실행됨**
 - `test_chats.py`: CHAT_HANDOFF 조건 1~6 (참가자만, 시작 규칙, 차단·거래 완료, 읽지 않은 수, 방문 제안 1회 답변, 신고 1회)
 - 테스트가 만든 사용자·매물·대화는 끝나면 지움. 실제 등록 매물이 DB에 있어도 통과함
 
@@ -72,6 +73,8 @@ python -m pytest -q
 | POST | `/api/v1/auth/register` | `User` + 세션 쿠키. 중복 이메일 409 `EMAIL_EXISTS` |
 | POST | `/api/v1/auth/login` | `User` + 세션 쿠키. 실패 401 `INVALID_CREDENTIALS` |
 | POST | `/api/v1/auth/logout` | 204, 세션 삭제 |
+| POST | `/api/v1/auth/oauth/{kakao\|google}/start` | `{authorizationUrl}` + 흐름 쿠키. 키 미설정 503 `OAUTH_NOT_CONFIGURED` |
+| GET | `/api/v1/auth/oauth/{kakao\|google}/callback` | 302 → 프론트 `/auth/callback` (세션 쿠키 발급). 실패는 `?error=` |
 | POST | `/api/v1/rooms` | 집주인 전용. `RoomSubmission` → `{roomId, status}` |
 | POST | `/api/v1/rooms/{id}/inquiries` | 로그인. 직접 등록한 공개 매물에만. 본인 매물 400 `OWN_ROOM` |
 | GET | `/api/v1/owner/rooms` | 내 매물 (`OwnerListing[]`, 연락처 포함 본인 전용) |
@@ -119,7 +122,6 @@ python -m pytest -q
 ### 아직 없는 것
 
 - `POST /rooms/draft`, `POST /recommendations`: AI 담당
-- `/auth/oauth/{provider}/start`: 카카오·구글 로그인, 나중에
 
 ### 로그인 구조
 
@@ -133,3 +135,28 @@ python -m pytest -q
 - **프론트 주소와 API 주소의 호스트를 맞출 것.** `127.0.0.1:5173` ↔ `127.0.0.1:8000`처럼. `localhost`와 `127.0.0.1`을 섞으면 브라우저가 다른 사이트로 봐서 로그인 쿠키가 안 붙음
 
 오류는 전부 `{"error": {"code": "...", "message": "..."}}` 형식.
+
+### 소셜 로그인 설정 (카카오·구글)
+
+흐름: 프론트 버튼 → `POST /start` → 카카오/구글 로그인 → **백엔드 `/callback`이 state·코드 검증 후 세션 발급** → 프론트 `/auth/callback` → `/auth/me`. 제공자 토큰과 비밀키는 브라우저에 전달되지 않음.
+
+**1. 카카오** ([developers.kakao.com](https://developers.kakao.com))
+1. 애플리케이션 추가 → **플랫폼 키 > REST API 키**를 `KAKAO_CLIENT_ID`에 넣기
+2. **카카오 로그인 활성화 ON**, **Redirect URI**에 `http://127.0.0.1:8000/api/v1/auth/oauth/kakao/callback` 등록 (배포 주소도 같은 형식으로 추가)
+3. **동의항목**: 닉네임 설정. 이메일은 비즈 앱 전환이 있어야 받을 수 있음. 못 받으면 `kakao_<id>@oauth.sunroom.invalid` 형태의 가상 이메일로 가입됨
+4. 보안 > Client Secret을 켰다면 `KAKAO_CLIENT_SECRET`에도 입력
+
+**2. 구글** ([console.cloud.google.com](https://console.cloud.google.com))
+1. OAuth 동의 화면 구성 (외부, 테스트 모드면 **테스트 사용자에 본인 이메일 추가**)
+2. 사용자 인증 정보 → OAuth 클라이언트 ID → **웹 애플리케이션**
+3. **승인된 리디렉션 URI**에 `http://127.0.0.1:8000/api/v1/auth/oauth/google/callback` 등록
+4. 클라이언트 ID/보안 비밀을 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`에 입력
+
+Redirect URI는 `OAUTH_REDIRECT_BASE` + `/api/v1/auth/oauth/<provider>/callback`과 **한 글자도 다르면 안 됨** (`localhost`와 `127.0.0.1`도 다른 주소).
+
+**정책**
+- 이미 연결된 소셜 계정은 그 사용자로 로그인. 처음 보는 소셜 계정인데 **같은 이메일의 기존 계정이 있으면 자동 병합하지 않고** 프론트에 `?error=account_link_required`로 돌려보냄 (계약)
+- 구글은 `email_verified`, 카카오는 `is_email_verified`인 이메일만 신뢰
+- 소셜 전용 계정은 `password_hash`가 null이라 이메일·비밀번호로 로그인할 수 없음
+- 신규 가입 역할은 `POST /start` 본문의 선택값 `role`(`seeker`|`landlord`, 기본 `seeker`). 이미 가입한 사용자의 역할은 바뀌지 않음
+- 프론트 `AuthCallback`은 `error=access_denied`만 "취소"로, 그 외는 공통 실패 문구로 표시함

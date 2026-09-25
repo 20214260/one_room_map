@@ -91,6 +91,17 @@ class UserRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class OAuthAccountRow(Base):
+    """public.oauth_accounts (sql/003). (제공자, 제공자 쪽 사용자 ID) → 우리 users.id."""
+
+    __tablename__ = "oauth_accounts"
+
+    provider: Mapped[str] = mapped_column(Text, primary_key=True)  # kakao | google
+    provider_user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class SessionRow(Base):
     """public.sessions (sql/003). 토큰 원문은 쿠키에만, DB에는 SHA-256 해시."""
 

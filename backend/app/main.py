@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .errors import register_error_handlers
 from .security import allowed_origins
-from .routers import auth, chats, owner, rooms
+from .routers import auth, chats, oauth, owner, rooms
 
 app = FastAPI(title="순룸 Sunroom API", version="1")
 register_error_handlers(app)
@@ -20,6 +20,7 @@ app.add_middleware(
 
 api = APIRouter(prefix="/api/v1")
 api.include_router(auth.router)
+api.include_router(oauth.router)
 api.include_router(rooms.router)
 api.include_router(owner.router)
 api.include_router(chats.router)
