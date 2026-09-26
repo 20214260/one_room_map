@@ -30,3 +30,48 @@
 - 프론트 `mock`: 시연만 가능. 실제 집주인 인증/승인을 제공한다는 표시 금지.
 - 실제 로그인·매물 등록을 공개하는 `http`: 위 API와 서버 권한 검사가 배포되어야 함. 백엔드 구현이 늦으면 집주인 가입·등록을 공개하지 않고 기존 방 찾기만 공개하는 범위로 제한합니다.
 - 사용자가 올린 등기 PDF/이미지의 글자가 일치한다는 사실만으로 승인하지 않습니다. 독립적인 원본 조회·본인 확인이 필요합니다.
+
+## 백엔드 구현 현황 (feat/owner-verification-api)
+
+- 위 두 API와 관리자 심사 API, `sql/005_owner_verification.sql`, 서버측 승인 검사를 구현함. 상세는 `backend/README.md`의 "집주인 인증"
+- 서버측 승인 검사 대상: `POST /rooms`, `POST /owner/photos`, `PATCH /owner/rooms/{id}`, `PATCH /owner/rooms/{id}/status`, `DELETE /owner/rooms/{id}` → 미승인 403 `VERIFICATION_REQUIRED`
+- 새 오류 코드(프론트 문구 매핑 필요 시 `gateway.ts` publicErrors에 추가): `VERIFICATION_PENDING`(심사 중 재신청), `ALREADY_VERIFIED`, `PROOF_EMPTY`·`PROOF_TYPE`·`PROOF_TOO_LARGE`·`PROOF_INVALID`, `PROOF_STORAGE`·`PROOF_UPLOAD`(저장소 문제)
+- 완료 조건 테스트: `backend/tests/test_verification.py` (DB 없이 실행)
+- 건물별 인증(4번)은 아직 계정 단위. 매물과 승인 건물을 연결하려면 `RoomSubmission`에 `buildingId`를 추가하는 계약 변경이 먼저 필요함
+
+## AI 심사 보조 입출력 (제안, AI 담당과 확정 필요)
+
+AI는 **추출과 불일치 표시만** 하고 승인·점수 같은 결정 필드는 두지 않는다. 서버는 결과를 `owner_verifications.ai_review`에 저장해 관리자 목록에 보여줄 뿐 상태를 바꾸지 않는다. AI 오류·형식 불일치·시간 초과는 `null`로 처리하고 관리자가 직접 심사한다.
+
+입력 (서버 → AI)
+
+```json
+{
+  "applicationId": "uuid",
+  "claimed": { "ownerName": "홍길동", "buildingAddress": "전남 순천시 중앙로 255" },
+  "document": { "mime": "application/pdf", "base64": "..." }
+}
+```
+
+- 주민등록번호 뒷자리 등은 AI에 보내기 전에 마스킹. 외부 AI 서비스로 원본을 보내는 경우 제출 화면의 동의 문구와 일치해야 함
+
+출력 (AI → 서버, `app/verification.py`의 `AiReview`로 형식 검사)
+
+```json
+{
+  "model": "gemini-...",
+  "extracted": {
+    "documentType": "registry | other | unknown",
+    "ownerNames": ["홍길동"],
+    "buildingAddress": "전라남도 순천시 중앙로 255",
+    "issuedAt": "2026-09-20"
+  },
+  "checks": [
+    { "field": "ownerName | buildingAddress | documentType | issuedAt", "result": "match | mismatch | unclear", "note": "공동명의 2인" }
+  ],
+  "summary": "소유자 이름 일치, 주소 표기 차이(도로명/지번) 확인 필요"
+}
+```
+
+- `checks`는 최대 10개, `note` 300자, `summary` 500자
+- 공동명의·법인·위임은 `unclear`로 표시하고 관리자 검토로 넘김

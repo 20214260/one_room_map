@@ -9,7 +9,8 @@ from ..listing import AUTO_PUBLISH, Contact, RoomSubmission, apply_submission, n
 from ..models import PUBLIC_STATUS, InquiryRow, RoomRow, UserRow, to_room
 from ..search import Search, search_rooms
 from ..security import rate_limit, verify_csrf
-from .auth import require_landlord, require_user
+from ..verification import require_verified_landlord
+from .auth import require_user
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -41,9 +42,9 @@ def get_room(room_id: str, db: Session = Depends(get_db)):
 
 # ── 집주인 매물 등록 ────────────────────────────────────────
 @router.post("", dependencies=[Depends(verify_csrf)])
-def submit_room(body: RoomSubmission, user: UserRow = Depends(require_landlord),
+def submit_room(body: RoomSubmission, user: UserRow = Depends(require_verified_landlord),
                 db: Session = Depends(get_db)):
-    """POST /api/v1/rooms (집주인 전용)  →  {roomId, status}"""
+    """POST /api/v1/rooms (인증 승인된 집주인 전용)  →  {roomId, status}. 미승인 403 VERIFICATION_REQUIRED"""
     rate_limit(f"submit:{user.id}", limit=20, per_seconds=3600)
     row = RoomRow(id=new_room_id(), owner_id=user.id,
                   status="published" if AUTO_PUBLISH else "pending_review",

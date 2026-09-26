@@ -27,7 +27,7 @@ from sqlalchemy.pool import StaticPool
 from app import oauth
 from app.db import Base, get_db
 from app.main import app
-from app.models import OAuthAccountRow, SessionRow, UserRow
+from app.models import OAuthAccountRow, OwnerVerificationRow, SessionRow, UserRow
 from app.security import _hits
 
 ORIGIN = "http://127.0.0.1:5173"
@@ -57,7 +57,8 @@ def db():
     for model in (UserRow, SessionRow, OAuthAccountRow):
         event.listen(model, "load", _utc_on_load)
     engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
-    Base.metadata.create_all(engine, tables=[UserRow.__table__, OAuthAccountRow.__table__, SessionRow.__table__])
+    Base.metadata.create_all(engine, tables=[UserRow.__table__, OAuthAccountRow.__table__, SessionRow.__table__,
+                                             OwnerVerificationRow.__table__])
     maker = sessionmaker(bind=engine)
 
     def override():

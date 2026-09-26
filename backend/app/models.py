@@ -114,6 +114,29 @@ class SessionRow(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class OwnerVerificationRow(Base):
+    """public.owner_verifications (sql/005). 사용자당 현재 신청 1건."""
+
+    __tablename__ = "owner_verifications"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    status: Mapped[str] = mapped_column(Text, default="not_submitted")
+    application_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    owner_name: Mapped[str | None] = mapped_column(Text)
+    building_address: Mapped[str | None] = mapped_column(Text)
+    proof_path: Mapped[str | None] = mapped_column(Text)  # 비공개 저장소 경로
+    proof_mime: Mapped[str | None] = mapped_column(Text)
+    proof_size: Mapped[int | None] = mapped_column(Integer)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True))
+    message: Mapped[str | None] = mapped_column(Text)
+    ai_review: Mapped[dict | None] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 def to_user(u: UserRow) -> dict:
     """DB 행 → 프론트 UserSchema. 비밀번호 해시는 절대 내보내지 않음."""
     return {"id": str(u.id), "name": u.name, "email": u.email, "provider": u.provider, "role": u.role}
