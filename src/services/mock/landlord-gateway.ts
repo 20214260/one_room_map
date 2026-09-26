@@ -7,6 +7,7 @@ import {
   PROOF_TYPES,
   type VerificationStatus,
 } from '../../contracts/verification';
+import { DecisionSchema, type AdminVerification } from '../../contracts/admin';
 import type { Gateway } from '../gateway';
 import { ApiError } from '../errors';
 import {
@@ -103,6 +104,25 @@ export function createMockGateway(): Gateway {
         message: '기존 시연 계정입니다. 실제 소유권 인증이 아닙니다.',
       };
     return read().verifications[u.id] ?? emptyVerification;
+  }
+  // Demo only: the seeker demo account plays the reviewer. Real admins come from server ADMIN_EMAILS.
+  function admin() {
+    const u = user();
+    if (u.id !== 'demo-seeker')
+      throw new ApiError('FORBIDDEN', '관리자 계정에서 이용할 수 있어요.', 403);
+    return u;
+  }
+  function adminItem(userId: string, v: VerificationStatus): AdminVerification {
+    return {
+      ...v,
+      userId,
+      email: '시연 계정 (이메일 저장 안 함)',
+      ownerName: null,
+      buildingAddress: null,
+      proof: null,
+      reviewedAt: null,
+      aiReview: null,
+    };
   }
   function requireApproved() {
     if (verification().status !== 'approved')
@@ -387,6 +407,42 @@ export function createMockGateway(): Gateway {
       };
       save({ ...read(), verifications: { ...read().verifications, [u.id]: next } });
       return structuredClone(next);
+    },
+    async listVerifications(status, signal) {
+      await wait(signal);
+      admin();
+      return {
+        items: Object.entries(read().verifications)
+          .filter(([, v]) => v.status === status)
+          .map(([userId, v]) => adminItem(userId, v)),
+      };
+    },
+    async downloadVerificationProof(_userId, signal) {
+      await wait(signal);
+      admin();
+      throw new ApiError('NOT_FOUND', '시연 모드에서는 서류를 저장하지 않아요.', 404);
+    },
+    async decideVerification(userId, decision, signal) {
+      await wait(signal);
+      admin();
+      const d = DecisionSchema.parse(decision);
+      const current = read().verifications[userId];
+      if (!current || current.applicationId !== d.applicationId)
+        throw new ApiError(
+          'STALE_APPLICATION',
+          '그사이 신청 내용이 바뀌었어요. 목록을 새로고침해 주세요.',
+          409,
+        );
+      const revoke = current.status === 'approved' && d.status === 'rejected';
+      if (current.status !== 'reviewing' && !revoke)
+        throw new ApiError(
+          'INVALID_TRANSITION',
+          '현재 상태에서는 변경할 수 없어요. 목록을 새로고침해 주세요.',
+          409,
+        );
+      const next: VerificationStatus = { ...current, status: d.status, message: d.message || null };
+      save({ ...read(), verifications: { ...read().verifications, [userId]: next } });
+      return adminItem(userId, next);
     },
     async register(email, _password, role = 'seeker') {
       const u = UserSchema.parse({

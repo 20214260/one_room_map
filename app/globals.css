@@ -3,6 +3,7 @@
 @import '../vendor/shadcn-tailwind-4.13.0.css';
 @import '../src/features/landlord/landlord.css';
 @import '../src/features/landlord/verification.css';
+@import '../src/features/admin/admin.css';
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
