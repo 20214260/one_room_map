@@ -58,6 +58,7 @@ python -m pytest -q
 - `test_photos.py`: 실제 이미지만 허용, 크기·형식 제한, EXIF 제거, Supabase 호출 형식 (저장소는 가짜로 대체)
 - `test_oauth.py`: 카카오·구글 로그인 (state·PKCE·리디렉트 검증, 계정 연결 정책). 메모리 SQLite와 가짜 제공자를 써서 **DB·키 없이 실행됨**
 - `test_chats.py`: CHAT_HANDOFF 조건 1~6 (참가자만, 시작 규칙, 차단·거래 완료, 읽지 않은 수, 방문 제안 1회 답변, 신고 1회)
+- `test_ai.py`: AI 추천·설명 초안. 규칙 기반 결과가 프론트와 같은지, DB에 없는 숫자·옵션·연락처·추정 표현이면 `mode: rules`로 대체되는지, 예비 모델 재시도. 가짜 Gemini·메모리 SQLite 사용 → **키·DB 없이 실행됨**
 - 테스트가 만든 사용자·매물·대화는 끝나면 지움. 실제 등록 매물이 DB에 있어도 통과함
 
 프론트 `src/domain/rooms.ts`의 검색 로직이 바뀌면 `app/search.py`도 같이 고치고, `tests/fixture_frontend.json`을 다시 뽑아야 함.
@@ -92,6 +93,8 @@ python -m pytest -q
 | POST | `/api/v1/chats/{id}/visits/{proposalId}/response` | 상대 제안에 1번만 답변 (두 번째 409) |
 | POST | `/api/v1/chats/{id}/block` | 차단. 기록은 유지 |
 | POST | `/api/v1/chats/{id}/reports` | 신고. 신고자별 1번 |
+| POST | `/api/v1/recommendations` | 비회원 가능. `{roomIds(1~2), filters, prompt(≤500)}` → `Recommendation`. 비공개·없는 매물 404 |
+| POST | `/api/v1/rooms/draft` | 집주인. `DraftRequest` → `DraftResponse` (설명 초안 + 게시글 금액 제안) |
 | GET | `/api/v1/health` | `{ok: true}` |
 
 ### 집주인 매물 규칙
@@ -119,9 +122,17 @@ python -m pytest -q
 - 설정이 없으면 업로드는 503 `PHOTO_STORAGE`로 거절되고 나머지 기능은 정상 동작
 - 매물 삭제 시 Storage 사진 정리는 아직 안 함 (나중에)
 
-### 아직 없는 것
+### AI 추천·매물 설명 초안 (Gemini)
 
-- `POST /rooms/draft`, `POST /recommendations`: AI 담당
+`.env`에 `GEMINI_API_KEY`(Google AI Studio 발급)를 넣으면 켜짐. 없거나 실패하면 프론트와 같은 규칙 기반 결과(`mode: rules`)를 돌려주므로 화면은 항상 동작함.
+
+- 모델: `GEMINI_MODEL`(기본 `gemini-3.8-flash`). 혼잡(503)·시간 초과면 `GEMINI_FALLBACK_MODEL`(기본 `gemini-3.5-flash`)로 한 번 더 시도. 시도당 9초라 프론트 AI 제한 20초 안에 끝남
+- 키는 URL 이 아니라 `x-goog-api-key` 헤더로 보냄. 응답·로그에 넣지 않음
+- **추천**: 브라우저가 보낸 가격이 아니라 DB에서 다시 읽은 매물 사실만 모델에 넘김. 사용자 선호 문장은 `<<< >>>`로 구분한 참고 자료로만 전달
+- **근거 검증**: 모델 답변의 숫자를 단위(만원·원·m·km·m²·평·층)별로 그 방의 DB 값 또는 두 방의 차이와 대조. 도보 시간(분) 같은 없는 데이터, 확인 안 된 옵션을 단정하면 거절 → `mode: rules` + `fallbackReason`
+- **설명 초안**: 게시글의 전화번호·카톡 아이디는 AI에 보내기 전에 `[연락처]`로 가림. 초안에 연락처, 입력에 없는 채광·방음·거리·면적·층 같은 추정 표현이 있으면 규칙 초안으로 대체. 금액 제안(hints)은 게시글에 실제로 적힌 금액만, 이미 입력한 항목은 제안하지 않음
+- 요청 빈도 제한: 추천 IP당 10분 20회, 초안 사용자당 10분 20회
+- 실측: 추천 약 3~7초, 초안 약 4초 (2026-09-27, Google 혼잡 시 규칙 기반으로 대체됨)
 
 ### 로그인 구조
 

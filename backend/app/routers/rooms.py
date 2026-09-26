@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
+from ..draft import DraftRequest, generate_draft
 from ..errors import ApiException
 from ..listing import AUTO_PUBLISH, Contact, RoomSubmission, apply_submission, new_room_id, owner_source
 from ..models import PUBLIC_STATUS, InquiryRow, RoomRow, UserRow, to_room
@@ -13,7 +14,14 @@ from .auth import require_landlord, require_user
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
-# 주의: 나중에 POST /rooms/draft 같은 고정 경로를 추가할 땐 /{room_id} 보다 위에 선언할 것
+# 주의: /rooms/draft 같은 고정 경로는 /{room_id} 보다 위에 선언할 것
+
+
+@router.post("/draft", dependencies=[Depends(verify_csrf)])
+def draft(body: DraftRequest, user: UserRow = Depends(require_landlord)):
+    """POST /api/v1/rooms/draft (집주인)  →  DraftResponse. AI 실패·미설정이면 mode: rules"""
+    rate_limit(f"draft:{user.id}", limit=20, per_seconds=600)
+    return generate_draft(body)
 
 
 @router.get("")
