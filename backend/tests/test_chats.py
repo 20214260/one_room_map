@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from app.db import engine
 from app.main import app
+from tests.verified import approve_landlord
 from app.security import _hits
 
 ORIGIN = "http://127.0.0.1:5173"
@@ -26,6 +27,8 @@ def make_user(role):
     email = f"chat-{role}-{uuid.uuid4().hex[:8]}@example.com"
     c.user = c.post("/api/v1/auth/register", headers=csrf(c),
                     json={"email": email, "password": "abcd1234", "role": role, "agreed": True}).json()
+    if role == "landlord":
+        approve_landlord(c.user["id"])
     return c
 
 

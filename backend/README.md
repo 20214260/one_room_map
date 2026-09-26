@@ -37,6 +37,7 @@ Supabase SQL Editor에서 `sql/` 파일을 번호 순서대로 실행. 전부 �
 | `002_seed.sql` | 샘플 매물 6개 |
 | `003_auth_owner.sql` | users·sessions·oauth_accounts, rooms에 status·owner_id·contact(비공개)·위치 힌트, inquiries. Supabase Auth 연동(profiles, 트리거) 제거 |
 | `004_chats.sql` | chats·chat_messages·chat_reports. 매물 삭제돼도 대화 기록 보존 |
+| `005_owner_verification.sql` | owner_verifications (집주인 인증 신청·심사). **기존 집주인도 not_submitted 로 시작 → 승인 전까지 매물 등록·수정 불가** |
 
 새 파일을 받으면 `pip install -r requirements.txt`도 다시 실행 (패키지가 추가될 수 있음)
 
@@ -58,6 +59,8 @@ python -m pytest -q
 - `test_photos.py`: 실제 이미지만 허용, 크기·형식 제한, EXIF 제거, Supabase 호출 형식 (저장소는 가짜로 대체)
 - `test_oauth.py`: 카카오·구글 로그인 (state·PKCE·리디렉트 검증, 계정 연결 정책). 메모리 SQLite와 가짜 제공자를 써서 **DB·키 없이 실행됨**
 - `test_chats.py`: CHAT_HANDOFF 조건 1~6 (참가자만, 시작 규칙, 차단·거래 완료, 읽지 않은 수, 방문 제안 1회 답변, 신고 1회)
+- `test_verification.py`: 집주인 인증 (가입 → 미승인 403 → 신청 → 관리자 승인 → 등록 가능, 남의 신청·관리자 API 차단, 증빙 파일 검사). **DB·키 없이 실행됨**
+- 실DB 테스트(`test_owner`·`test_photos`·`test_chats`)는 가입한 집주인을 `tests/verified.py`로 승인 처리함 → `005` 적용 필요
 - `test_ai.py`: AI 추천·설명 초안. 규칙 기반 결과가 프론트와 같은지, DB에 없는 숫자·옵션·연락처·추정 표현이면 `mode: rules`로 대체되는지, 예비 모델 재시도. 가짜 Gemini·메모리 SQLite 사용 → **키·DB 없이 실행됨**
 - 테스트가 만든 사용자·매물·대화는 끝나면 지움. 실제 등록 매물이 DB에 있어도 통과함
 
@@ -76,7 +79,7 @@ python -m pytest -q
 | POST | `/api/v1/auth/logout` | 204, 세션 삭제 |
 | POST | `/api/v1/auth/oauth/{kakao\|google}/start` | `{authorizationUrl}` + 흐름 쿠키. 키 미설정 503 `OAUTH_NOT_CONFIGURED` |
 | GET | `/api/v1/auth/oauth/{kakao\|google}/callback` | 302 → 프론트 `/auth/callback` (세션 쿠키 발급). 실패는 `?error=` |
-| POST | `/api/v1/rooms` | 집주인 전용. `RoomSubmission` → `{roomId, status}` |
+| POST | `/api/v1/rooms` | **인증 승인된** 집주인 전용. `RoomSubmission` → `{roomId, status}`. 미승인 403 `VERIFICATION_REQUIRED` |
 | POST | `/api/v1/rooms/{id}/inquiries` | 로그인. 직접 등록한 공개 매물에만. 본인 매물 400 `OWN_ROOM` |
 | GET | `/api/v1/owner/rooms` | 내 매물 (`OwnerListing[]`, 연락처 포함 본인 전용) |
 | PATCH | `/api/v1/owner/rooms/{id}` | 전체 `RoomSubmission` 교체 |
@@ -93,6 +96,11 @@ python -m pytest -q
 | POST | `/api/v1/chats/{id}/visits/{proposalId}/response` | 상대 제안에 1번만 답변 (두 번째 409) |
 | POST | `/api/v1/chats/{id}/block` | 차단. 기록은 유지 |
 | POST | `/api/v1/chats/{id}/reports` | 신고. 신고자별 1번 |
+| GET | `/api/v1/owner/verification` | 집주인 본인 `VerificationStatus`. 일반 사용자 403 |
+| POST | `/api/v1/owner/verification` | multipart `ownerName`, `buildingAddress`, `consent=true`, `proof` → `VerificationStatus`(reviewing). 심사 중 409 `VERIFICATION_PENDING`, 승인 후 409 `ALREADY_VERIFIED` |
+| GET | `/api/v1/admin/verifications?status=reviewing` | 관리자. 신청 목록 (이름·주소·증빙 형식·AI 참고 결과) |
+| GET | `/api/v1/admin/verifications/{userId}/proof` | 관리자. 증빙 원본 다운로드 |
+| POST | `/api/v1/admin/verifications/{userId}/decision` | 관리자. `{applicationId, status: approved\|needs_info\|rejected, message}` |
 | POST | `/api/v1/recommendations` | 비회원 가능. `{roomIds(1~2), filters, prompt(≤500)}` → `Recommendation`. 비공개·없는 매물 404 |
 | POST | `/api/v1/rooms/draft` | 집주인. `DraftRequest` → `DraftResponse` (설명 초안 + 게시글 금액 제안) |
 | GET | `/api/v1/health` | `{ok: true}` |
@@ -121,6 +129,17 @@ python -m pytest -q
 - 서버가 사진을 다시 열어서 진짜 이미지인지 확인하고, 긴 변 1200px JPEG로 다시 저장함 (촬영 위치 같은 EXIF 제거)
 - 설정이 없으면 업로드는 503 `PHOTO_STORAGE`로 거절되고 나머지 기능은 정상 동작
 - 매물 삭제 시 Storage 사진 정리는 아직 안 함 (나중에)
+
+### 집주인 인증 (docs/OWNER_VERIFICATION_HANDOFF.md)
+
+- 매물 등록(`POST /rooms`), 사진 업로드, 매물 수정·공개 상태 변경·삭제는 `require_verified_landlord`로 **서버에 저장된 승인 상태**까지 확인. 역할만 맞고 미승인이면 403 `VERIFICATION_REQUIRED`. 내 매물·문의 조회는 기존대로 역할만 확인
+- 이메일·소셜 가입 모두 집주인이면 `not_submitted` 행을 만듦
+- 상태 흐름: `not_submitted → reviewing → approved | needs_info | rejected`. `needs_info`·`rejected`면 재신청 가능(새 applicationId, 이전 증빙 삭제). `approved → rejected`는 권한 철회
+- 승인은 관리자만. 관리자는 `.env`의 `ADMIN_EMAILS`에 있는 이메일로 로그인한 계정. 본인 신청은 결정 불가, `applicationId`가 현재 신청과 다르면 409
+- 증빙: 매직 바이트로 PDF/JPEG/PNG 판별(선언 형식과 다르면 415), 5MB, 이미지는 다시 인코딩해 메타데이터 제거, PDF는 암호화·JavaScript·실행·첨부 파일 포함 시 거절
+- 보관: `SUPABASE_SERVICE_ROLE_KEY`가 있으면 **Private** 버킷 `PROOF_BUCKET`(공개 버킷이면 저장 거부), 없으면 서버 로컬 `backend/.private/proofs`(git 제외). 공개 URL 없음, 관리자 API로만 다운로드
+- AI 심사 보조는 `app/verification.py`의 `run_ai_review` 자리. 결과는 `ai_review`에 참고용으로만 저장하고 상태는 바꾸지 않음. 입출력 형식은 AI 담당과 확정 필요
+- 아직 안 한 것: 승인된 건물과 매물 위치 연결(`RoomSubmission`에 `buildingId`가 없어 계약 변경 필요), 관리자 화면(지금은 API만)
 
 ### AI 추천·매물 설명 초안 (Gemini)
 

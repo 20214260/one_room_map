@@ -1,6 +1,7 @@
 """집주인 전용 API. 계약: docs/LANDLORD_HANDOFF.md, src/contracts/landlord.ts
 
 모든 경로에서 세션의 user.id 로 소유권을 검사함. 남의 매물·문의는 404 (존재 여부도 숨김).
+매물 수정·상태 변경·삭제·사진 업로드는 집주인 인증 승인(require_verified_landlord)까지 확인. 미승인 403 VERIFICATION_REQUIRED.
 """
 
 from typing import Literal
@@ -16,6 +17,7 @@ from ..listing import AUTO_PUBLISH, RoomSubmission, apply_submission, to_owner_l
 from ..models import InquiryRow, RoomRow, UserRow
 from ..security import rate_limit, verify_csrf
 from ..storage import MAX_BYTES, normalize_image, upload_photo
+from ..verification import require_verified_landlord
 from .auth import require_landlord
 
 router = APIRouter(prefix="/owner", tags=["owner"])
@@ -36,7 +38,7 @@ def my_rooms(user: UserRow = Depends(require_landlord), db: Session = Depends(ge
 
 
 @router.patch("/rooms/{room_id}", dependencies=[Depends(verify_csrf)])
-def update_room(room_id: str, body: RoomSubmission, user: UserRow = Depends(require_landlord),
+def update_room(room_id: str, body: RoomSubmission, user: UserRow = Depends(require_verified_landlord),
                 db: Session = Depends(get_db)):
     """전체 RoomSubmission 교체."""
     row = _owned(db, room_id, user)
@@ -53,7 +55,7 @@ class StatusBody(BaseModel):
 
 
 @router.patch("/rooms/{room_id}/status", dependencies=[Depends(verify_csrf)])
-def set_status(room_id: str, body: StatusBody, user: UserRow = Depends(require_landlord),
+def set_status(room_id: str, body: StatusBody, user: UserRow = Depends(require_verified_landlord),
                db: Session = Depends(get_db)):
     """
     - pending_review 로는 집주인이 바꿀 수 없음
@@ -74,7 +76,7 @@ def set_status(room_id: str, body: StatusBody, user: UserRow = Depends(require_l
 
 
 @router.delete("/rooms/{room_id}", status_code=204, dependencies=[Depends(verify_csrf)])
-def delete_room(room_id: str, user: UserRow = Depends(require_landlord), db: Session = Depends(get_db)):
+def delete_room(room_id: str, user: UserRow = Depends(require_verified_landlord), db: Session = Depends(get_db)):
     row = _owned(db, room_id, user)
     db.delete(row)  # 문의는 FK on delete cascade 로 같이 삭제
     db.commit()
@@ -115,7 +117,7 @@ def read_inquiry(inquiry_id: str, user: UserRow = Depends(require_landlord), db:
 
 
 @router.post("/photos", dependencies=[Depends(verify_csrf)])
-async def upload(file: UploadFile = File(...), user: UserRow = Depends(require_landlord)):
+async def upload(file: UploadFile = File(...), user: UserRow = Depends(require_verified_landlord)):
     """POST /owner/photos (multipart file) → {photo: {url, alt}}"""
     rate_limit(f"photo:{user.id}", limit=40, per_seconds=600)
     data = await file.read(MAX_BYTES + 1)

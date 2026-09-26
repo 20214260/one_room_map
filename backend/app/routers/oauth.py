@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from .. import oauth
 from ..db import get_db
 from ..errors import ApiException
-from ..models import OAuthAccountRow, UserRow
+from ..models import OAuthAccountRow, OwnerVerificationRow, UserRow
 from ..security import COOKIE_SECURE, client_ip, rate_limit, verify_csrf
 from .auth import _start_session
 
@@ -121,6 +121,8 @@ def callback(
             db.add(user)
             db.flush()
             db.add(OAuthAccountRow(provider=provider, provider_user_id=profile.provider_user_id, user_id=user.id))
+            if role == "landlord":
+                db.add(OwnerVerificationRow(user_id=user.id, status="not_submitted"))
             db.flush()
         except IntegrityError:
             # 같은 계정으로 콜백이 동시에 두 번 들어온 경우: 먼저 끝난 쪽 계정으로 로그인

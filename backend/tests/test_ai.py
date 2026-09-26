@@ -29,7 +29,7 @@ from app import gemini
 from app.db import Base, get_db
 from app.draft import DraftRequest, generate_draft
 from app.main import app
-from app.models import RoomRow, SessionRow, UserRow
+from app.models import OwnerVerificationRow, RoomRow, SessionRow, UserRow
 from app.recommend import FALLBACK_REASONS, recommend
 from app.search import Filters
 from app.security import _hits
@@ -244,7 +244,7 @@ def _utc_on_load(target, _context):
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    models = (UserRow, SessionRow, RoomRow)
+    models = (UserRow, SessionRow, RoomRow, OwnerVerificationRow)
     for m in models:
         event.listen(m, "load", _utc_on_load)
     engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
@@ -267,7 +267,9 @@ def client(monkeypatch):
 
     app.dependency_overrides[get_db] = override
     _hits.clear()
-    yield TestClient(app, headers={"Origin": ORIGIN})
+    c = TestClient(app, headers={"Origin": ORIGIN})
+    c.maker = maker
+    yield c
     app.dependency_overrides.pop(get_db, None)
     for m in models:
         event.remove(m, "load", _utc_on_load)
@@ -282,6 +284,7 @@ def register(c, role):
     res = c.post("/api/v1/auth/register", headers=csrf(c),
                  json={"email": email, "password": "abcd1234", "role": role, "agreed": True})
     assert res.status_code == 200
+    return res.json()["id"]
 
 
 def test_recommendations_route(client):
@@ -303,7 +306,12 @@ def test_draft_route_landlord_only(client):
     register(client, "seeker")
     assert client.post("/api/v1/rooms/draft", json=body, headers=csrf(client)).status_code == 403
     landlord = TestClient(app, headers={"Origin": ORIGIN})
-    register(landlord, "landlord")
+    landlord_id = register(landlord, "landlord")
+    res = landlord.post("/api/v1/rooms/draft", json=body, headers=csrf(landlord))
+    assert res.status_code == 403 and res.json()["error"]["code"] == "VERIFICATION_REQUIRED"  # 인증 전
+    with client.maker() as s:
+        s.get(OwnerVerificationRow, uuid.UUID(landlord_id)).status = "approved"
+        s.commit()
     res = landlord.post("/api/v1/rooms/draft", json=body, headers=csrf(landlord))
     assert res.status_code == 200 and res.json()["mode"] == "rules" and res.json()["hints"] == {"deposit": 3000000}
     assert landlord.post("/api/v1/rooms/draft", json=body | {"pastedListingText": "가" * 2001},

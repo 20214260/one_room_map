@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..errors import ApiException
-from ..models import SessionRow, UserRow, to_user
+from ..models import OwnerVerificationRow, SessionRow, UserRow, to_user
 from ..security import (
     COOKIE_SECURE,
     CSRF_COOKIE,
@@ -146,6 +146,8 @@ def register(body: RegisterBody, request: Request, response: Response, db: Sessi
     )
     db.add(user)
     db.flush()
+    if user.role == "landlord":  # 집주인은 인증 전 상태로 시작 (매물 API 는 승인 후 사용 가능)
+        db.add(OwnerVerificationRow(user_id=user.id, status="not_submitted"))
     _start_session(db, response, user)
     db.commit()
     return to_user(user)
