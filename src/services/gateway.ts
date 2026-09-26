@@ -7,6 +7,14 @@ import {
   type VerificationStatus,
   type VerificationInput,
 } from '../contracts/verification';
+import {
+  AdminVerificationSchema,
+  AdminVerificationsSchema,
+  DecisionSchema,
+  type AdminVerification,
+  type Decision,
+  type ReviewFilter,
+} from '../contracts/admin';
 import { createMockGateway } from './mock/landlord-gateway';
 import { ApiError } from './errors';
 export { ApiError } from './errors';
@@ -104,6 +112,16 @@ export interface Gateway {
   readInquiry(id: string, signal?: AbortSignal): Promise<void>;
   generateDraft(input: DraftRequest, signal?: AbortSignal): Promise<DraftResponse>;
   uploadPhoto(file: File, signal?: AbortSignal): Promise<UploadResponse>;
+  listVerifications(
+    status: ReviewFilter,
+    signal?: AbortSignal,
+  ): Promise<{ items: AdminVerification[] }>;
+  downloadVerificationProof(userId: string, signal?: AbortSignal): Promise<Blob>;
+  decideVerification(
+    userId: string,
+    decision: Decision,
+    signal?: AbortSignal,
+  ): Promise<AdminVerification>;
   logout(): Promise<void>;
   oauth(provider: 'kakao' | 'google', returnTo: string): Promise<string>;
 }
@@ -118,6 +136,15 @@ const publicErrors: Record<string, string> = {
   CHAT_BLOCKED: '차단된 대화에는 메시지를 보낼 수 없어요.',
   ROOM_CLOSED: '거래가 종료되어 새 메시지를 보낼 수 없어요.',
   VERIFICATION_REQUIRED: '매물 등록 전에 집주인 인증을 완료해 주세요.',
+  VERIFICATION_PENDING: '이미 심사 중인 신청이 있어요. 결과를 기다려 주세요.',
+  ALREADY_VERIFIED: '이미 인증이 완료된 계정이에요.',
+  PROOF_EMPTY: '빈 파일은 제출할 수 없어요.',
+  PROOF_TYPE: 'PDF·JPG·PNG 파일만 제출할 수 있어요.',
+  PROOF_TOO_LARGE: '파일은 5MB 이하로 제출해 주세요.',
+  PROOF_INVALID: '파일을 확인할 수 없어요. 다른 파일로 다시 제출해 주세요.',
+  PROOF_STORAGE: '서류 보관소 설정을 확인하고 있어요. 잠시 후 다시 시도해 주세요.',
+  PROOF_UPLOAD: '서류를 저장하지 못했어요. 잠시 후 다시 시도해 주세요.',
+  STALE_APPLICATION: '그사이 신청 내용이 바뀌었어요. 목록을 새로고침한 뒤 다시 확인해 주세요.',
 };
 export function createGateway(config: AppConfig): Gateway {
   if (config.mode === 'mock') return createMockGateway();
@@ -125,7 +152,13 @@ export function createGateway(config: AppConfig): Gateway {
   async function request<T>(
     path: string,
     schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-    options: { method?: string; body?: unknown; signal?: AbortSignal; timeout?: number } = {},
+    options: {
+      method?: string;
+      body?: unknown;
+      signal?: AbortSignal;
+      timeout?: number;
+      blob?: boolean;
+    } = {},
   ): Promise<T> {
     const controller = new AbortController(),
       abort = () => controller.abort();
@@ -176,7 +209,7 @@ export function createGateway(config: AppConfig): Gateway {
         );
       }
       if (response.status === 204) return schema.parse(null);
-      const result = schema.safeParse(await response.json());
+      const result = schema.safeParse(options.blob ? await response.blob() : await response.json());
       if (!result.success)
         throw new ApiError(
           'INVALID_RESPONSE',
@@ -271,6 +304,28 @@ export function createGateway(config: AppConfig): Gateway {
         timeout: 30000,
       });
     },
+    listVerifications: (status, signal) =>
+      request(
+        `/admin/verifications?status=${encodeURIComponent(status)}`,
+        AdminVerificationsSchema,
+        { signal },
+      ),
+    downloadVerificationProof: (userId, signal) =>
+      request(`/admin/verifications/${encodeURIComponent(userId)}/proof`, z.instanceof(Blob), {
+        signal,
+        timeout: 30000,
+        blob: true,
+      }),
+    decideVerification: (userId, decision, signal) =>
+      request(
+        `/admin/verifications/${encodeURIComponent(userId)}/decision`,
+        AdminVerificationSchema,
+        {
+          method: 'POST',
+          body: DecisionSchema.parse(decision),
+          signal,
+        },
+      ),
     myRooms: (signal) => request('/owner/rooms', OwnerListingsSchema, { signal }),
     updateRoom: (id, input, signal) =>
       request(`/owner/rooms/${encodeURIComponent(id)}`, OwnerListingSchema, {
