@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import {
+  VerificationInputSchema,
+  VerificationStatusSchema,
+  emptyVerification,
+  MAX_PROOF_BYTES,
+  PROOF_TYPES,
+  type VerificationStatus,
+} from '../../contracts/verification';
 import type { Gateway } from '../gateway';
 import { ApiError } from '../errors';
 import {
@@ -33,9 +41,16 @@ const StateSchema = z.object({
   listings: z.array(OwnerListingSchema),
   inquiries: z.array(InboxItemSchema.extend({ ownerId: z.string() })),
   chats: z.array(StoredChatSchema).default([]),
+  verifications: z.record(VerificationStatusSchema).default({}),
 });
 type State = z.infer<typeof StateSchema>;
-const initial = (): State => ({ user: null, listings: [], inquiries: [], chats: [] });
+const initial = (): State => ({
+  user: null,
+  listings: [],
+  inquiries: [],
+  chats: [],
+  verifications: {},
+});
 const id = () => globalThis.crypto.randomUUID();
 
 export function createMockGateway(): Gateway {
@@ -78,6 +93,24 @@ export function createMockGateway(): Gateway {
     if (role && u.role !== role)
       throw new ApiError('FORBIDDEN', '집주인 계정에서 이용할 수 있어요.', 403);
     return u;
+  }
+  function verification(): VerificationStatus {
+    const u = user('landlord');
+    if (u.id === 'demo-landlord')
+      return {
+        ...emptyVerification,
+        status: 'approved',
+        message: '기존 시연 계정입니다. 실제 소유권 인증이 아닙니다.',
+      };
+    return read().verifications[u.id] ?? emptyVerification;
+  }
+  function requireApproved() {
+    if (verification().status !== 'approved')
+      throw new ApiError(
+        'VERIFICATION_REQUIRED',
+        '집주인 인증을 신청한 뒤 승인받아야 매물을 등록할 수 있어요.',
+        403,
+      );
   }
   function owned(roomId: string) {
     const u = user('landlord');
@@ -330,6 +363,31 @@ export function createMockGateway(): Gateway {
       save({ ...read(), user: u });
       return structuredClone(u);
     },
+    async getOwnerVerification(signal) {
+      await wait(signal);
+      return structuredClone(verification());
+    },
+    async submitOwnerVerification(input, proof, signal) {
+      await wait(signal);
+      const u = user('landlord');
+      VerificationInputSchema.parse(input);
+      if (
+        !PROOF_TYPES.includes(proof.type as (typeof PROOF_TYPES)[number]) ||
+        proof.size > MAX_PROOF_BYTES ||
+        proof.size === 0
+      )
+        throw new ApiError('INVALID_PROOF', 'PDF·JPG·PNG 파일을 5MB 이하로 선택해 주세요.');
+      // Demo only records a status. Names, addresses and evidence never enter sessionStorage.
+      const next: VerificationStatus = {
+        status: 'reviewing',
+        applicationId: id(),
+        submittedAt: new Date().toISOString(),
+        message:
+          '시연에서는 실제 서류를 전송하거나 판정하지 않습니다. 관리자 심사 대기 상태를 보여줘요.',
+      };
+      save({ ...read(), verifications: { ...read().verifications, [u.id]: next } });
+      return structuredClone(next);
+    },
     async register(email, _password, role = 'seeker') {
       const u = UserSchema.parse({
         id: `demo-${id()}`,
@@ -356,6 +414,7 @@ export function createMockGateway(): Gateway {
     async submitRoom(input, signal) {
       await wait(signal);
       const u = user('landlord');
+      requireApproved();
       const submission = RoomSubmissionSchema.omit({ pastedListingText: true }).parse(input);
       const roomId = `owner-${id()}`;
       save({
@@ -461,6 +520,7 @@ export function createMockGateway(): Gateway {
     async uploadPhoto(file, signal) {
       await wait(signal);
       user('landlord');
+      requireApproved();
       validatePhoto(file);
       const url = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();

@@ -1,4 +1,12 @@
 import { z } from 'zod';
+import {
+  VerificationStatusSchema,
+  VerificationInputSchema,
+  MAX_PROOF_BYTES,
+  PROOF_TYPES,
+  type VerificationStatus,
+  type VerificationInput,
+} from '../contracts/verification';
 import { createMockGateway } from './mock/landlord-gateway';
 import { ApiError } from './errors';
 export { ApiError } from './errors';
@@ -82,6 +90,12 @@ export interface Gateway {
   login(email: string, password: string): Promise<User>;
   register(email: string, password: string, role?: Role): Promise<User>;
   demoLogin(role: Role): Promise<User>;
+  getOwnerVerification(signal?: AbortSignal): Promise<VerificationStatus>;
+  submitOwnerVerification(
+    input: VerificationInput,
+    proof: File,
+    signal?: AbortSignal,
+  ): Promise<VerificationStatus>;
   myRooms(signal?: AbortSignal): Promise<{ items: OwnerListing[] }>;
   updateRoom(id: string, input: RoomSubmission, signal?: AbortSignal): Promise<OwnerListing>;
   setRoomStatus(id: string, status: ListingStatus, signal?: AbortSignal): Promise<OwnerListing>;
@@ -103,6 +117,7 @@ const publicErrors: Record<string, string> = {
   INVALID_TRANSITION: '현재 상태에서는 변경할 수 없어요. 목록을 새로고침해 주세요.',
   CHAT_BLOCKED: '차단된 대화에는 메시지를 보낼 수 없어요.',
   ROOM_CLOSED: '거래가 종료되어 새 메시지를 보낼 수 없어요.',
+  VERIFICATION_REQUIRED: '매물 등록 전에 집주인 인증을 완료해 주세요.',
 };
 export function createGateway(config: AppConfig): Gateway {
   if (config.mode === 'mock') return createMockGateway();
@@ -233,6 +248,28 @@ export function createGateway(config: AppConfig): Gateway {
       ).then(() => undefined),
     async demoLogin() {
       throw new ApiError('FORBIDDEN', '임시 로그인은 시연 모드에서만 사용할 수 있어요.', 403);
+    },
+    getOwnerVerification: (signal) =>
+      request('/owner/verification', VerificationStatusSchema, { signal }),
+    submitOwnerVerification: (input, proof, signal) => {
+      const valid = VerificationInputSchema.parse(input);
+      if (
+        !PROOF_TYPES.includes(proof.type as (typeof PROOF_TYPES)[number]) ||
+        proof.size > MAX_PROOF_BYTES ||
+        proof.size === 0
+      )
+        throw new ApiError('INVALID_PROOF', 'PDF·JPG·PNG 파일을 5MB 이하로 선택해 주세요.');
+      const body = new FormData();
+      body.append('ownerName', valid.ownerName);
+      body.append('buildingAddress', valid.buildingAddress);
+      body.append('consent', 'true');
+      body.append('proof', proof);
+      return request('/owner/verification', VerificationStatusSchema, {
+        method: 'POST',
+        body,
+        signal,
+        timeout: 30000,
+      });
     },
     myRooms: (signal) => request('/owner/rooms', OwnerListingsSchema, { signal }),
     updateRoom: (id, input, signal) =>

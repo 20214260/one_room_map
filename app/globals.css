@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import '../vendor/shadcn-tailwind-4.13.0.css';
 @import '../src/features/landlord/landlord.css';
+@import '../src/features/landlord/verification.css';
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -1958,7 +1959,17 @@ img {
 .terms-check label {
   flex: 1;
 }
-.terms-check button {
+.terms-check [data-slot='checkbox'] {
+  border: 1px solid #b1bba0;
+  background: #fff;
+  color: #fff;
+  cursor: pointer;
+}
+.terms-check [data-slot='checkbox'][data-state='checked'] {
+  border-color: #e94b30;
+  background: #e94b30;
+}
+.terms-check button:not([data-slot='checkbox']) {
   border: 0;
   background: none;
   text-decoration: underline;
