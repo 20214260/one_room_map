@@ -70,6 +70,50 @@ test('역할/소유권과 등록→수정→비공개→거래완료→삭제, �
   assert.equal((await api.myRooms()).items.length, 0);
 });
 
+test('새 집주인 가입은 승인 전 매물 등록 불가, 시연 신청도 자동 승인하지 않음', async () => {
+  const api = createGateway({ mode: 'mock', apiBaseUrl: '', kakaoMapKey: '' });
+  await api.register('new-owner@example.com', 'ignored123', 'landlord');
+  assert.equal((await api.getOwnerVerification()).status, 'not_submitted');
+  await assert.rejects(() => api.submitRoom(submission), (e) => e.status === 403);
+  const proof = new File(['sample'], 'sample.pdf', { type: 'application/pdf' });
+  const pending = await api.submitOwnerVerification({
+    ownerName: '시연용 이름', buildingAddress: '시연용 건물 주소 123', consent: true,
+  }, proof);
+  assert.equal(pending.status, 'reviewing');
+  assert.equal((await api.getOwnerVerification()).status, 'reviewing');
+  await assert.rejects(() => api.submitRoom(submission), (e) => e.status === 403);
+  await api.demoLogin('landlord');
+  assert.equal((await api.getOwnerVerification()).status, 'approved');
+  assert((await api.submitRoom(submission)).roomId);
+});
+
+test('HTTP 인증 신청은 서버 판정만 수용하고 인증 쿠키·CSRF로 파일을 전달', async () => {
+  const original = global.fetch;
+  const api = createGateway({ mode: 'http', apiBaseUrl: 'https://api.example/api/v1', kakaoMapKey: '' });
+  const calls = [];
+  const response = { status: 'reviewing', applicationId: 'request-1', submittedAt: new Date().toISOString(), message: null };
+  try {
+    global.fetch = async (url, options) => {
+      calls.push({ url, options });
+      return new Response(JSON.stringify(url.endsWith('/csrf') ? { token: 'csrf' } : response));
+    };
+    const proof = new File(['sample'], 'proof.pdf', { type: 'application/pdf' });
+    const result = await api.submitOwnerVerification({
+      ownerName: '홍길동', buildingAddress: '순천시 건물 주소 123', consent: true,
+    }, proof);
+    assert.equal(result.status, 'reviewing');
+    const request = calls.find((c) => c.url.endsWith('/owner/verification'));
+    assert.equal(request.options.credentials, 'include');
+    assert.equal(request.options.headers['X-CSRF-Token'], 'csrf');
+    assert(request.options.body instanceof FormData);
+    assert.equal(request.options.body.get('ownerName'), '홍길동');
+    assert.equal(request.options.body.get('proof'), proof);
+    assert.equal(request.options.body.get('status'), null);
+  } finally {
+    global.fetch = original;
+  }
+});
+
 test('문의 수신은 소유자만, 회신 연락처 비노출, 읽음 처리', async () => {
   const api = createGateway({ mode: 'mock', apiBaseUrl: '', kakaoMapKey: '' });
   await api.demoLogin('landlord');

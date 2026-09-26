@@ -56,7 +56,13 @@ export function AuthScreen() {
       track('login_success');
       setPassword('');
       setConfirmation('');
-      router.replace(user.role === 'landlord' && returnTo() === '/' ? '/landlord' : returnTo());
+      router.replace(
+        tab === 'register' && user.role === 'landlord'
+          ? '/landlord/verify'
+          : user.role === 'landlord' && returnTo() === '/'
+            ? '/landlord'
+            : returnTo(),
+      );
     } catch (e) {
       setMessage((e as Error).message);
     } finally {
