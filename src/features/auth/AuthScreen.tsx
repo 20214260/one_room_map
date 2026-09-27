@@ -73,7 +73,8 @@ export function AuthScreen() {
     setBusy(true);
     setMessage('');
     try {
-      location.assign(await api.oauth(provider, returnTo()));
+      // 회원가입 탭에서 고른 역할을 처음 가입할 때 전달 (로그인 탭은 기존 계정 역할 유지, 새 계정은 seeker)
+      location.assign(await api.oauth(provider, returnTo(), tab === 'register' ? role : undefined));
     } catch (e) {
       setMessage((e as Error).message);
       setBusy(false);
@@ -141,6 +142,33 @@ export function AuthScreen() {
               <TabsTrigger value="register">회원가입</TabsTrigger>
             </TabsList>
           </Tabs>
+          {tab === 'register' && (
+            <fieldset className="owner-role-select">
+              <legend>어떻게 순룸을 이용하실 건가요?</legend>
+              <div>
+                {(['seeker', 'landlord'] as const).map((value) => (
+                  <label key={value} className={role === value ? 'chosen' : ''}>
+                    <input
+                      type="radio"
+                      name="role"
+                      value={value}
+                      checked={role === value}
+                      onChange={() => setRole(value)}
+                      disabled={busy}
+                    />
+                    <span>
+                      <strong>{value === 'seeker' ? '방을 구해요' : '방을 내놓아요'}</strong>
+                      <small>
+                        {value === 'seeker'
+                          ? '내 조건에 맞는 방 찾기'
+                          : '집주인 · 매물 등록과 관리'}
+                      </small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <div className="social-buttons">
             <button className="kakao-login" disabled={busy} onClick={() => oauth('kakao')}>
               <MessageCircle size={19} fill="currentColor" />
@@ -154,33 +182,6 @@ export function AuthScreen() {
             <span>또는 이메일로</span>
           </div>
           <form noValidate onSubmit={submit}>
-            {tab === 'register' && (
-              <fieldset className="owner-role-select">
-                <legend>어떻게 순룸을 이용하실 건가요?</legend>
-                <div>
-                  {(['seeker', 'landlord'] as const).map((value) => (
-                    <label key={value} className={role === value ? 'chosen' : ''}>
-                      <input
-                        type="radio"
-                        name="role"
-                        value={value}
-                        checked={role === value}
-                        onChange={() => setRole(value)}
-                        disabled={busy}
-                      />
-                      <span>
-                        <strong>{value === 'seeker' ? '방을 구해요' : '방을 내놓아요'}</strong>
-                        <small>
-                          {value === 'seeker'
-                            ? '내 조건에 맞는 방 찾기'
-                            : '집주인 · 매물 등록과 관리'}
-                        </small>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            )}
             <label htmlFor="email">이메일</label>
             <input
               id="email"

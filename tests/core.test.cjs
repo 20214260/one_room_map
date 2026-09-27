@@ -313,6 +313,38 @@ test('HTTP는 mock 로그인 금지, 가입 역할 전달, 역할 없는 응답�
     global.fetch = original;
   }
 });
+test('소셜 가입 시작: 고른 역할을 서버로 전달, 로그인(역할 없음)은 role 생략', async () => {
+  const original = global.fetch;
+  const api = createGateway({
+    mode: 'http',
+    apiBaseUrl: 'https://api.example/api/v1',
+    kakaoMapKey: '',
+  });
+  const calls = [];
+  try {
+    global.fetch = async (url, options) => {
+      calls.push({ url, options });
+      return new Response(
+        JSON.stringify(
+          url.endsWith('/csrf')
+            ? { token: 'csrf' }
+            : { authorizationUrl: 'https://kauth.kakao.com/oauth/authorize?state=x' },
+        ),
+      );
+    };
+    await api.oauth('kakao', '/compare', 'landlord');
+    await api.oauth('kakao', '/compare');
+    const starts = calls.filter((c) => c.url.endsWith('/auth/oauth/kakao/start'));
+    assert.deepEqual(JSON.parse(starts[0].options.body), {
+      returnTo: '/compare',
+      role: 'landlord',
+    });
+    assert.deepEqual(JSON.parse(starts[1].options.body), { returnTo: '/compare' });
+    await assert.rejects(() => api.oauth('kakao', '/', 'admin'));
+  } finally {
+    global.fetch = original;
+  }
+});
 test('월 부담액은 0을 보존하고 누락 관리비를 추정하지 않음', () => {
   assert.equal(d.monthlyCost({ rent: 0, maintenance: 0 }), 0);
   assert.equal(d.monthlyCost({ rent: 320000, maintenance: 50000 }), 370000);

@@ -10,3 +10,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+
+
+# DB 없이 도는 테스트(test_ai·test_oauth·test_verification)는 메모리 SQLite 를 씀.
+# JSONB 컬럼이 SQLite 에서도 만들어지도록 여기서 한 번만 등록 → 어떤 파일을 따로 돌려도 통과
+from sqlalchemy.dialects.postgresql import JSONB  # noqa: E402
+from sqlalchemy.ext.compiler import compiles  # noqa: E402
+
+
+@compiles(JSONB, "sqlite")
+def _jsonb_on_sqlite(_type, _compiler, **_kw):
+    return "JSON"

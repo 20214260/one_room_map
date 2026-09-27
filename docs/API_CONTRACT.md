@@ -25,7 +25,7 @@
 | POST   | `/auth/register`               | `{email,password,role,agreed:true,termsVersion}`    | `User`, 세션 쿠키 설정           |
 | POST   | `/auth/login`                  | `{email,password}`                                  | `User`, 세션 쿠키 설정           |
 | POST   | `/auth/logout`                 | 없음                                                | 204, 쿠키 만료                   |
-| POST   | `/auth/oauth/{provider}/start` | `{returnTo: '/compare?ids=...'}`                    | `{authorizationUrl}`             |
+| POST   | `/auth/oauth/{provider}/start` | `{returnTo, role?}` (role 은 처음 가입할 때만 반영) | `{authorizationUrl}`             |
 | POST   | `/recommendations`             | `{roomIds,filters,prompt}`                          | `Recommendation`                 |
 | POST   | `/rooms`                       | `RoomSubmission` (집주인 등록, 아래 참고)           | `{roomId, status}`               |
 | POST   | `/rooms/{id}/inquiries`        | `{roomId,message,replyContact}`                     | `{status: 'sent'\|'failed'}`     |
