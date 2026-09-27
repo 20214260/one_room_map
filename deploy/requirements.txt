@@ -1,0 +1,3 @@
+# 서버 운영 의존성 = 앱 의존성 + Supervisor
+-r ../backend/requirements.txt
+supervisor>=4.2

@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .errors import register_error_handlers
+from .frontend import mount_frontend
 from .security import allowed_origins
 from .routers import admin, auth, chats, oauth, owner, recommendations, rooms, verification
 
@@ -35,3 +36,5 @@ def health():
 
 
 app.include_router(api)
+# 배포: FRONTEND_DIST 가 있으면 화면도 같은 포트에서 (API 라우트 뒤에 등록해야 /api 가 우선)
+mount_frontend(app)

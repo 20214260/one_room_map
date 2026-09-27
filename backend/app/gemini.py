@@ -16,8 +16,8 @@ import httpx
 API = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 DEFAULT_MODEL = "gemini-3.8-flash"
 DEFAULT_FALLBACK_MODEL = "gemini-3.5-flash"
-# 프론트 AI 요청 제한(20초) 안에 두 번 시도가 끝나도록
-ATTEMPT_TIMEOUT = 9.0
+# 프론트 AI 요청 제한(20초) 안에 끝나도록: 기본 모델에 12초, 혼잡·시간 초과 시 예비 모델에 5초
+ATTEMPT_TIMEOUTS = (12.0, 5.0)
 
 # 테스트에서 httpx.MockTransport 로 바꿔 끼움
 transport: httpx.BaseTransport | None = None
@@ -41,7 +41,7 @@ def _models() -> list[str]:
     return [primary] + ([fallback] if fallback and fallback != primary else [])
 
 
-def generate_json(system: str, prompt: str, schema: dict, timeout: float = ATTEMPT_TIMEOUT) -> dict:
+def generate_json(system: str, prompt: str, schema: dict, timeouts: tuple[float, ...] = ATTEMPT_TIMEOUTS) -> dict:
     """JSON 스키마로 제한한 응답을 dict 로 반환. 실패하면 AiUnavailable."""
     key = os.getenv("GEMINI_API_KEY", "")
     if not key:
@@ -56,10 +56,15 @@ def generate_json(system: str, prompt: str, schema: dict, timeout: float = ATTEM
         },
     }
     reason = "error"
-    with httpx.Client(transport=transport, timeout=timeout) as client:
-        for model in _models():
+    with httpx.Client(transport=transport) as client:
+        for model, timeout in zip(_models(), timeouts):
+            config = dict(body["generationConfig"])
+            if model.startswith("gemini-3"):
+                # 짧은 비교·초안이라 깊은 추론이 필요 없음. 응답 시간 편차(4~30초+)를 줄임
+                config["thinkingConfig"] = {"thinkingLevel": "low"}
             try:
-                res = client.post(API.format(model=model), headers={"x-goog-api-key": key}, json=body)
+                res = client.post(API.format(model=model), headers={"x-goog-api-key": key},
+                                  json=body | {"generationConfig": config}, timeout=timeout)
             except httpx.TimeoutException:
                 reason = "timeout"
                 continue  # 느린 모델 대신 예비 모델로

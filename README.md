@@ -198,6 +198,16 @@ pnpm exec vite --config vite.local.config.ts
 
 ---
 
+## 대회 서버 배포
+
+https://a7.scnuoss.net 에 배포되어 있음. 배포 방법·서버 구조·운영 명령은 [배포 문서](docs/DEPLOY.md) 참고.
+
+```powershell
+bash scripts/deploy.sh
+```
+
+---
+
 ## 5. 오류 확인
 
 ```powershell
