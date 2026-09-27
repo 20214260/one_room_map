@@ -105,6 +105,7 @@ def callback(
 
     # 3) 사용자 찾기/만들기
     user = _find_linked(db, provider, profile.provider_user_id)
+    return_to = safe_return_path(flow["r"])
     if user is None:
         email = profile.email or f"{provider}_{profile.provider_user_id}@oauth.sunroom.invalid"
         if db.scalar(select(UserRow.id).where(func.lower(UserRow.email) == email)):
@@ -123,6 +124,8 @@ def callback(
             db.add(OAuthAccountRow(provider=provider, provider_user_id=profile.provider_user_id, user_id=user.id))
             if role == "landlord":
                 db.add(OwnerVerificationRow(user_id=user.id, status="not_submitted"))
+                # 이메일 가입과 같게: 새 집주인은 인증 신청 화면부터 (승인 전엔 매물 등록 403)
+                return_to = "/landlord/verify"
             db.flush()
         except IntegrityError:
             # 같은 계정으로 콜백이 동시에 두 번 들어온 경우: 먼저 끝난 쪽 계정으로 로그인
@@ -133,7 +136,7 @@ def callback(
 
     # 4) 세션 발급 후 프론트로 복귀. 프론트가 /auth/me 로 로그인 상태를 확인함
     res = RedirectResponse(
-        f"{oauth.frontend_url()}/auth/callback?{urlencode({'returnTo': safe_return_path(flow['r'])})}",
+        f"{oauth.frontend_url()}/auth/callback?{urlencode({'returnTo': return_to})}",
         status_code=302,
     )
     _start_session(db, res, user)

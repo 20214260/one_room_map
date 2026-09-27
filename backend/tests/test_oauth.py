@@ -228,8 +228,18 @@ def test_code_exchange_request_shape(client, provider):
 
 def test_google_signup_as_landlord(client, provider):
     url = start(client, "google", role="landlord").json()["authorizationUrl"]
-    assert finish(client, "google", url).status_code == 302
+    res = finish(client, "google", url)
+    assert res.status_code == 302
+    # 새 집주인은 이메일 가입처럼 인증 신청 화면으로
+    assert res.headers["location"] == f"{FRONT}/auth/callback?returnTo=%2Flandlord%2Fverify"
     assert client.get("/api/v1/auth/me").json()["role"] == "landlord"
+
+
+def test_existing_landlord_login_keeps_return_to(client, provider):
+    finish(client, "kakao", start(client, "kakao", role="landlord").json()["authorizationUrl"])
+    client.cookies.clear()
+    res = finish(client, "kakao", start(client, "kakao").json()["authorizationUrl"])
+    assert res.headers["location"] == f"{FRONT}/auth/callback?returnTo=%2Fcompare%3Fids%3Da%2Cb"
 
 
 def test_second_login_reuses_same_user(client, provider, db):

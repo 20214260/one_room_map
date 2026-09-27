@@ -48,6 +48,7 @@ import {
   type UploadResponse,
 } from '../contracts/landlord';
 import {
+  RoleSchema,
   RoomSchema,
   RoomsResponseSchema,
   UserSchema,
@@ -123,7 +124,8 @@ export interface Gateway {
     signal?: AbortSignal,
   ): Promise<AdminVerification>;
   logout(): Promise<void>;
-  oauth(provider: 'kakao' | 'google', returnTo: string): Promise<string>;
+  // role 은 처음 가입할 때만 쓰임. 이미 연결된 소셜 계정은 기존 역할 유지
+  oauth(provider: 'kakao' | 'google', returnTo: string, role?: Role): Promise<string>;
 }
 const publicErrors: Record<string, string> = {
   EMAIL_EXISTS: '이미 가입된 이메일이에요. 로그인을 시도해 주세요.',
@@ -431,11 +433,17 @@ export function createGateway(config: AppConfig): Gateway {
         body: { email, password, role, termsVersion: '2026-09-22', agreed: true },
       }),
     logout: () => request('/auth/logout', z.null(), { method: 'POST' }).then(() => undefined),
-    async oauth(provider, returnTo) {
+    async oauth(provider, returnTo, role) {
       const result = await request(
         `/auth/oauth/${provider}/start`,
         z.object({ authorizationUrl: z.string().url() }),
-        { method: 'POST', body: { returnTo: safeReturnPath(returnTo) } },
+        {
+          method: 'POST',
+          body: {
+            returnTo: safeReturnPath(returnTo),
+            ...(role ? { role: RoleSchema.parse(role) } : {}),
+          },
+        },
       );
       const url = new URL(result.authorizationUrl);
       const allowed = provider === 'kakao' ? ['kauth.kakao.com'] : ['accounts.google.com'];
