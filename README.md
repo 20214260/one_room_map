@@ -18,6 +18,8 @@ GPT, Claude, Codex 같은 AI로 작업할 때 이 README 내용이랑 수정할 
 
 ## 프로젝트 설명
 
+설계(요구사항·기술 구성·역할 분담): [docs/DESIGN.md](docs/DESIGN.md) · 배포: [docs/DEPLOY.md](docs/DEPLOY.md) · 라이선스: [MIT](LICENSE), 오픈소스 출처 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)
+
 순천대학교 학생들이 예산과 원하는 조건에 맞는 원룸을 쉽게 찾고 비교할 수 있도록 만든 서비스.
 
 방 찾기·비교와 집주인 매물 등록·관리, 사용자와 집주인의 채팅까지 프론트엔드 시연이 가능함. 기본 샘플 매물 6개에 더해 같은 브라우저 탭에서 집주인이 등록한 매물을 검색·지도에 표시함.
@@ -73,22 +75,20 @@ GPT, Claude, Codex 같은 AI로 작업할 때 이 README 내용이랑 수정할 
 
 ---
 
-## 아직 실제로 연결되지 않은 기능
+## 서버 연동 현황 (2026-09-27, https://a7.scnuoss.net)
 
-아래 기능은 실제 서버나 외부 서비스와 아직 연결되지 않음. 일부는 화면 시연만 제공하며 찜 목록은 추후 구현 대상임.
+`http` 모드(배포 서버)에서 실제로 연결된 기능:
 
-* 실제 회원가입 및 로그인
-* Kakao, Google OAuth 로그인
-* 실제 원룸 매물 데이터
-* 실제 카카오 지도
-* 실제 사용자 위치
-* Gemini를 이용한 AI 추천
-* 집주인 매물 설명의 실제 AI 초안 생성
-* 서버에서 여러 사용자·기기 간 매물/문의/채팅 공유 및 채팅 실시간 갱신
-* 찜 목록 저장
-* 서버 데이터베이스 저장
+* 이메일 회원가입·로그인, Kakao·Google 로그인 (FastAPI 세션)
+* 매물·문의·채팅·집주인 인증 DB 저장 (Supabase PostgreSQL)
+* 카카오 지도
+* Gemini AI 비교 추천, 집주인 매물 설명 AI 초안 (근거 검증, 실패 시 규칙 기반)
+* 관리자 집주인 인증 심사 (`/admin`)
 
-기본 실행은 `mock` 모드이며 예제 매물과 탭 단위 등록 매물로 작동함.
+아직 없는 것: 실제 사용자 위치, 찜 목록, 채팅 실시간 갱신(현재 12초 주기), AI 서류 심사 보조, 실측 도보 거리.
+
+로컬 기본 실행은 `mock` 모드이며 예제 매물과 탭 단위 등록 매물로 작동함. 백엔드와 연결하려면 아래 환경변수 참고.
+
 
 ---
 
@@ -513,3 +513,9 @@ pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+---
+
+# 라이선스
+
+순룸 코드는 [MIT License](LICENSE)를 따름. 사용한 라이브러리·외부 API·샘플 사진의 라이선스와 출처는 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md), [docs/DATA_SOURCES.md](docs/DATA_SOURCES.md) 참고.
