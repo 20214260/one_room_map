@@ -37,16 +37,16 @@ SCNU OSS · AI 해커톤 (고급 교육) · 팀 a7
 
 ## 대회 필수 항목 대응
 
-| 항목 | 요구사항 | 순룸에서 한 것 |
+| 항목   | 요구사항 | 순룸에서 한 것 |
 | --- | --- | --- |
-| **설계** | 요구사항, 기술구성, 역할분담 | [docs/DESIGN.md](docs/DESIGN.md): 문제 정의, 기능·비기능 요구사항 12개, 기술 구성도, AI 설계, 역할 분담. API 계약 문서([API_CONTRACT](docs/API_CONTRACT.md) 등)와 zod 스키마로 프론트·백 형식 고정 |
-| **AI 기능** | AI 모델·API 데이터 활용 핵심 기능 | Google **Gemini**(`gemini-3.8-flash`, 예비 `gemini-3.5-flash`)로 **비교 추천**과 **매물 소개글 초안**. DB 근거 검증, 연락처 마스킹, 실패 시 규칙 기반 대체. 카카오 지도 API 연동 |
-| **협업** | 브랜치, Issue, PR | 파트별 브랜치(`fe`·`be`·`ai`·`feat/*`) → **PR 12개 병합**, **Issue 13개**(완료 기록·남은 작업, 라벨·담당 표시), PR ↔ Issue 연결(`Closes #16`) |
-| **서버 배포** | app.scnuoss.net 외부 접속 | **https://a7.scnuoss.net** 운영. nginx(정적 화면) + FastAPI(`/api`) 구조, `bash scripts/deploy.sh` 한 번으로 빌드·전송·실행·점검. [docs/DEPLOY.md](docs/DEPLOY.md) |
-| **안정성** | 오류·예외처리, 재시작 후 구동, 테스트 | Supervisor **자동 재시작**(강제 종료 후 복구 확인), `@reboot` cron. 모든 화면 로딩·빈 상태·오류 처리, 외부 API 실패 시 대체 동작. **테스트: 백엔드 282개, 프론트 23개**, GitHub Actions(타입 검사·테스트·빌드) |
-| **문서화** | README, 설치·배포 방법, 라이선스 출처 | 이 README, [개발 가이드](docs/DEVELOPMENT.md)(설치·실행·브랜치 규칙), [배포](docs/DEPLOY.md), [백엔드](backend/README.md), [MIT LICENSE](LICENSE), 라이브러리·API·사진 출처([THIRD_PARTY](docs/THIRD_PARTY.md), [DATA_SOURCES](docs/DATA_SOURCES.md)) |
-| **보안** | 비밀키·개인정보 비노출, 기본 보안 | 키는 서버 `.env`(권한 600)에만, 배포 시 비밀 파일 **외부 노출 자동 점검**. HttpOnly 세션 쿠키 + CSRF + Origin 검사, scrypt 비밀번호, 요청 빈도 제한. **집주인 권한은 화면이 아닌 서버에서 검사**, 공개 응답에 연락처 제외, 인증 서류 비공개 보관·파일 검사(형식 위장·PDF 스크립트 거절, 이미지 메타데이터 제거) |
-| **최종 제출** | 실행 URL, GitHub, 발표·시연 자료 | 실행 URL https://a7.scnuoss.net · GitHub 이 저장소 · 발표·시연 자료
+| **설계**   | 요구사항, 기술구성, 역할분담 | [docs/DESIGN.md](docs/DESIGN.md): 문제 정의, 기능·비기능 요구사항 12개, 기술 구성도, AI 설계, 역할 분담. API 계약 문서([API_CONTRACT](docs/API_CONTRACT.md) 등)와 zod 스키마로 프론트·백 형식 고정 |
+| **AI 기능**   | AI 모델·API 데이터 활용 핵심 기능 | Google **Gemini**(`gemini-3.8-flash`, 예비 `gemini-3.5-flash`)로 **비교 추천**과 **매물 소개글 초안**. DB 근거 검증, 연락처 마스킹, 실패 시 규칙 기반 대체. 카카오 지도 API 연동 |
+| **협업**   | 브랜치, Issue, PR | 파트별 브랜치(`fe`·`be`·`ai`·`feat/*`) → **PR 12개 병합**, **Issue 13개**(완료 기록·남은 작업, 라벨·담당 표시), PR ↔ Issue 연결(`Closes #16`) |
+| **서버 배포**   | app.scnuoss.net 외부 접속 | **https://a7.scnuoss.net** 운영. nginx(정적 화면) + FastAPI(`/api`) 구조, `bash scripts/deploy.sh` 한 번으로 빌드·전송·실행·점검. [docs/DEPLOY.md](docs/DEPLOY.md) |
+| **안정성**   | 오류·예외처리, 재시작 후 구동, 테스트 | Supervisor **자동 재시작**(강제 종료 후 복구 확인), `@reboot` cron. 모든 화면 로딩·빈 상태·오류 처리, 외부 API 실패 시 대체 동작. **테스트: 백엔드 282개, 프론트 23개**, GitHub Actions(타입 검사·테스트·빌드) |
+| **문서화**   | README, 설치·배포 방법, 라이선스 출처 | 이 README, [개발 가이드](docs/DEVELOPMENT.md)(설치·실행·브랜치 규칙), [배포](docs/DEPLOY.md), [백엔드](backend/README.md), [MIT LICENSE](LICENSE), 라이브러리·API·사진 출처([THIRD_PARTY](docs/THIRD_PARTY.md), [DATA_SOURCES](docs/DATA_SOURCES.md)) |
+| **보안**   | 비밀키·개인정보 비노출, 기본 보안 | 키는 서버 `.env`(권한 600)에만, 배포 시 비밀 파일 **외부 노출 자동 점검**. HttpOnly 세션 쿠키 + CSRF + Origin 검사, scrypt 비밀번호, 요청 빈도 제한. **집주인 권한은 화면이 아닌 서버에서 검사**, 공개 응답에 연락처 제외, 인증 서류 비공개 보관·파일 검사(형식 위장·PDF 스크립트 거절, 이미지 메타데이터 제거) |
+| **최종 제출**   | 실행 URL, GitHub, 발표·시연 자료 | 실행 URL https://a7.scnuoss.net · GitHub 이 저장소 · 발표·시연 자료
 
 ## 기술 구성
 
