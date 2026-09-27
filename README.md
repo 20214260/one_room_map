@@ -46,7 +46,7 @@ SCNU OSS · AI 해커톤 (고급 교육) · 팀 a7
 | **안정성** | 오류·예외처리, 재시작 후 구동, 테스트 | Supervisor **자동 재시작**(강제 종료 후 복구 확인), `@reboot` cron. 모든 화면 로딩·빈 상태·오류 처리, 외부 API 실패 시 대체 동작. **테스트: 백엔드 282개, 프론트 23개**, GitHub Actions(타입 검사·테스트·빌드) |
 | **문서화** | README, 설치·배포 방법, 라이선스 출처 | 이 README, [개발 가이드](docs/DEVELOPMENT.md)(설치·실행·브랜치 규칙), [배포](docs/DEPLOY.md), [백엔드](backend/README.md), [MIT LICENSE](LICENSE), 라이브러리·API·사진 출처([THIRD_PARTY](docs/THIRD_PARTY.md), [DATA_SOURCES](docs/DATA_SOURCES.md)) |
 | **보안** | 비밀키·개인정보 비노출, 기본 보안 | 키는 서버 `.env`(권한 600)에만, 배포 시 비밀 파일 **외부 노출 자동 점검**. HttpOnly 세션 쿠키 + CSRF + Origin 검사, scrypt 비밀번호, 요청 빈도 제한. **집주인 권한은 화면이 아닌 서버에서 검사**, 공개 응답에 연락처 제외, 인증 서류 비공개 보관·파일 검사(형식 위장·PDF 스크립트 거절, 이미지 메타데이터 제거) |
-| **최종 제출** | 실행 URL, GitHub, 발표·시연 자료 | 실행 URL https://a7.scnuoss.net · GitHub 이 저장소 · 발표·시연 자료 준비 중 ([#24](https://github.com/20214260/one_room_map/issues/24)) |
+| **최종 제출** | 실행 URL, GitHub, 발표·시연 자료 | 실행 URL https://a7.scnuoss.net · GitHub 이 저장소 · 발표·시연 자료
 
 ## 기술 구성
 
