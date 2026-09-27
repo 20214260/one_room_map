@@ -7,7 +7,6 @@ import { type AppConfig, type Filters, type User, emptyFilters } from '../contra
 import { createGateway, type Gateway } from '../services/gateway';
 import { readFilters, toggleComparison } from '../domain/rooms';
 import { AppContext as Context } from './app-context';
-import './keep-navigation';
 export { useApp } from './app-context';
 export function AppProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
   const api = useMemo(() => createGateway(config), [config]);
