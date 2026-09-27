@@ -4,6 +4,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
@@ -43,10 +44,26 @@ const time = (iso: string) =>
   }).format(new Date(iso));
 const changed = () => window.dispatchEvent(new Event('sunroom:chat-changed'));
 
+// 배포용 정적 빌드(vinext output: export)에서는 useSearchParams() 가 미리 만든 페이지 기준의
+// 빈 값을 돌려줘서 /chats?room=… 의 room 을 읽지 못함. 비어 있으면 브라우저 주소에서 직접 읽음.
+const subscribeLocation = (notify: () => void) => {
+  window.addEventListener('popstate', notify);
+  return () => window.removeEventListener('popstate', notify);
+};
+function useChatParams(): URLSearchParams {
+  const routerParams = useSearchParams();
+  const locationSearch = useSyncExternalStore(
+    subscribeLocation,
+    () => window.location.search,
+    () => '',
+  );
+  return routerParams.toString() ? routerParams : new URLSearchParams(locationSearch);
+}
+
 export function ChatScreen() {
   const { api, user, authLoading, authError, config } = useApp();
   const router = useRouter();
-  const params = useSearchParams();
+  const params = useChatParams();
   const selectedId = params.get('id');
   const roomId = params.get('room');
   const [items, setItems] = useState<ChatSummary[]>([]);
