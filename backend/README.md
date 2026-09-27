@@ -145,7 +145,7 @@ python -m pytest -q
 
 `.env`에 `GEMINI_API_KEY`(Google AI Studio 발급)를 넣으면 켜짐. 없거나 실패하면 프론트와 같은 규칙 기반 결과(`mode: rules`)를 돌려주므로 화면은 항상 동작함.
 
-- 모델: `GEMINI_MODEL`(기본 `gemini-3.8-flash`). 혼잡(503)·시간 초과면 `GEMINI_FALLBACK_MODEL`(기본 `gemini-3.5-flash`)로 한 번 더 시도. 시도당 9초라 프론트 AI 제한 20초 안에 끝남
+- 모델: `GEMINI_MODEL`(기본 `gemini-3.8-flash`). 혼잡(503)·시간 초과면 `GEMINI_FALLBACK_MODEL`(기본 `gemini-3.5-flash`)로 한 번 더 시도. 기본 12초 + 예비 5초라 프론트 AI 제한 20초 안에 끝남. Gemini 3 모델은 `thinkingLevel: low`로 응답 시간 편차를 줄임
 - 키는 URL 이 아니라 `x-goog-api-key` 헤더로 보냄. 응답·로그에 넣지 않음
 - **추천**: 브라우저가 보낸 가격이 아니라 DB에서 다시 읽은 매물 사실만 모델에 넘김. 사용자 선호 문장은 `<<< >>>`로 구분한 참고 자료로만 전달
 - **근거 검증**: 모델 답변의 숫자를 단위(만원·원·m·km·m²·평·층)별로 그 방의 DB 값 또는 두 방의 차이와 대조. 도보 시간(분) 같은 없는 데이터, 확인 안 된 옵션을 단정하면 거절 → `mode: rules` + `fallbackReason`

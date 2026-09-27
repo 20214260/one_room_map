@@ -16,7 +16,11 @@ EVIDENCE_FIELDS = ("rent", "maintenance", "deposit", "monthly", "area", "floor",
 OPTION_LABELS = {"aircon": "에어컨", "washer": "세탁기", "fridge": "냉장고", "induction": "인덕션",
                  "desk": "책상", "closet": "옷장", "elevator": "엘리베이터"}
 FACILITY_LABELS = {"convenience": "편의점", "market": "마트", "bus": "버스정류장"}
-UNKNOWN_WORDS = re.compile(r"정보\s*없|확인되지|확인이\s*안|확인할\s*수\s*없|미상|알\s*수\s*없|모르")
+# '정보 없음'이라고 말한 경우만 인정. '제공되지 않아요'만 있으면 없다고 단정한 것이라 불인정
+UNKNOWN_WORDS = re.compile(
+    r"정보[는가이]?\s*(없|제공되지|나와\s*있지|명시되지|기재되지|적혀\s*있지|표시되지)"
+    r"|확인되지|확인이\s*안|확인할\s*수\s*없|미상|알\s*수\s*없|모르"
+)
 MAX_EVIDENCE = 4
 
 FALLBACK_REASONS = {

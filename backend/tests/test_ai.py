@@ -124,6 +124,11 @@ def test_unknown_option_claim_falls_back(ai):
     assert recommend([a, B], Filters(), "")["mode"] == "rules"
     ai(payload=ai_items(a_reasons=[("options", "세탁기는 정보 없음이라 확인이 필요해요.")]))
     assert recommend([a, B], Filters(), "")["mode"] == "ai"
+    # 실제 Gemini 답변에서 나온 표현 (2026-09-27 서버 확인)
+    ai(payload=ai_items(a_reasons=[("options", "세탁기 정보는 제공되지 않아요.")]))
+    assert recommend([a, B], Filters(), "")["mode"] == "ai"
+    ai(payload=ai_items(a_reasons=[("options", "세탁기가 제공되지 않아요.")]))  # 정보 없는데 없다고 단정
+    assert recommend([a, B], Filters(), "")["mode"] == "rules"
 
 
 @pytest.mark.parametrize("payload", [
